@@ -37,6 +37,9 @@ PHQ_BINS = [(0, 9), (10, 14), (15, 27)]
 GAD_BINS = [(0, 4), (5, 9), (10, 14), (15, 21)]
 EDGE_DURS = (10.0, 20.0, 29.0, 30.0)
 SPLITS = ("train", "val", "test")
+# Duration column name per split, as the DAM 1 config reads it (`duration_column`).
+DURATION_COLUMN = {"train": "prompt_vad_trimmed_duration", "val": "prompt_vad_cut_duration",
+                   "test": "prompt_vad_cut_duration"}
 
 
 def stratified_scores(rng, n, bins):
@@ -113,11 +116,7 @@ def build_split(rng, mode, split, n, min_dur, max_dur, out, extra_durs=()):
             "filename": f"{split}/{uuid}",  # -> <audio_root>/<filename>.wav
             "phq": int(phq[i]),
             "gad": int(gad[i]),
-            # Same value in both names: configs use one per split (train vs val/test).
-            "prompt_vad_trimmed_duration": dur,
-            "prompt_vad_cut_duration": dur,
-            "asr_output_id": uuid,  # only read by text runs; value unused
-            "user": uuid,  # one recording per subject
+            DURATION_COLUMN[split]: dur,  # seconds; name read by `duration_column`
         })
     return rows
 
@@ -137,9 +136,9 @@ def check_split(split, rows, out, min_dur):
     for r in rows:
         with wave.open(str(out / "audio" / f"{r['filename']}.wav")) as w:
             assert w.getframerate() == SR and w.getnchannels() == 1 and w.getsampwidth() == 2
-            assert abs(w.getnframes() / SR - r["prompt_vad_trimmed_duration"]) < 1e-9
+            assert abs(w.getnframes() / SR - r[DURATION_COLUMN[split]]) < 1e-9
         assert 0 <= r["phq"] <= 27 and 0 <= r["gad"] <= 21
-    kept = [r for r in rows if r["prompt_vad_trimmed_duration"] >= min_dur]
+    kept = [r for r in rows if r[DURATION_COLUMN[split]] >= min_dur]
     phq = np.array([r["phq"] for r in rows])
     gad = np.array([r["gad"] for r in rows])
     cov = {f"phq>{c}": f"{(phq > c).sum()}/{len(rows)}" for c in (9, 14)}

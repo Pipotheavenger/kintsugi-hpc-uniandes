@@ -11,8 +11,13 @@ modelo aprenda.
 
 **Generador.** `hpc/make_synth_data.py` (solo numpy). Escribe `train.csv`, `val.csv`,
 `test.csv` y WAV mono de 16 kHz que cumplen el contrato de datos del código:
-columnas `uuid, filename, phq, gad, prompt_vad_trimmed_duration, prompt_vad_cut_duration,
-asr_output_id, user`; audios en `<out>/random/audio/<split>/<uuid>.wav`.
+columnas `uuid, filename, phq, gad` + una de duración según el split
+(`prompt_vad_trimmed_duration` en train, `prompt_vad_cut_duration` en val/test, como las lee el
+config de DAM 1); audios en `<out>/random/audio/<split>/<uuid>.wav`.
+
+> Cambio posterior (2026-10-21): la primera versión escribía además `asr_output_id`, `user` y las
+> dos columnas de duración en todos los splits. Se quitaron porque DAM 1 no las usa
+> (`asr_output_id`: solo texto; `user`: solo `merge_rows_by_subject`). Hay que regenerar la etapa 1.
 Duración 60–61 s porque DAM 1 entrena con `random_adjacent_pair` (2 ventanas de 30 s).
 Etiquetas estratificadas para que cada split tenga casos a ambos lados de los cortes de las
 métricas (phq > 9, > 14; gad > 4, > 9, > 14).
