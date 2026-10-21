@@ -121,3 +121,15 @@ ls ~/.cache/huggingface/hub
 **Hallazgo.** El nodo de cómputo (`nodea-6`) tiene salida a internet: la descarga desde Hugging
 Face corrió a ~42 MB/s. El aviso "unauthenticated requests to the HF Hub" es solo un límite de
 velocidad; no hace falta `HF_TOKEN` para este modelo público.
+
+## 5. `run_job.sbatch` ajustado a Hypatia
+
+**Cambios (2026-10-21).**
+
+- Ruta del repo: `cd "$HOME/kintsugi-hpc-uniandes"` → `REPO_DIR="$HOME/Kintusgi/kintsugi-hpc-uniandes"`
+  y `cd "$REPO_DIR"` (es donde está clonado).
+- `export KINTSUGI_RAD_PATH="$REPO_DIR"`: `kirad.utils.get_package_path("kirad")` usa esta
+  variable para encontrar el repo (setup.cfg y git) al registrar la versión en W&B.
+- Entorno: se mantiene `module load anaconda`; la activación pasa de `source activate` a
+  `eval "$(conda shell.bash hook)"` + `conda activate kintsugi`, dentro de `set +u ... set -u`
+  porque los scripts de activación de conda fallan con variables no definidas bajo `set -u`.

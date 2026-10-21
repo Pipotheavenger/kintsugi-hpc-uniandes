@@ -19,10 +19,17 @@ export DATA_DIR="${DATA_DIR:-$HOME/data}"     # datasets live outside the repo
 export RUNS_DIR="${RUNS_DIR:-$HOME/runs}"     # outputs/checkpoints outside the repo
 mkdir -p "$RUNS_DIR"
 
+REPO_DIR="$HOME/Kintusgi/kintsugi-hpc-uniandes"
+export KINTSUGI_RAD_PATH="$REPO_DIR"   # where kirad.utils.get_package_path finds kintsugi-rad
+
 module purge
 module load anaconda
-source activate "${ENV_NAME:-kintsugi}"
+# Activate the env automatically (batch shells don't read ~/.bashrc; conda scripts break under set -u).
+set +u
+eval "$(conda shell.bash hook)"
+conda activate "${ENV_NAME:-kintsugi}"
+set -u
 
-cd "$HOME/kintsugi-hpc-uniandes"
+cd "$REPO_DIR"
 echo "Running commit: $(git rev-parse --short HEAD)"   # reproducibility: log what ran
 python "$@"
