@@ -97,3 +97,27 @@ for package in ["kirad"]:
 
 **Nota.** `get_package_info("kirad")` necesita encontrar `kirad`: instalado con `pip install -e .`
 en el entorno `kintsugi`, o con la variable `KINTSUGI_RAD_PATH`. Si no, falla en ese punto.
+
+## 4. Whisper en caché (Hugging Face)
+
+**Objetivo.** Descargar antes de la primera corrida el modelo que usa DAM 1
+(`openai/whisper-small.en`) para que el job no dependa de bajarlo.
+
+**Comando (2026-10-21), en un nodo de cómputo.**
+
+```bash
+srun --mem=8G --time=00:30:00 --pty bash      # asignó nodea-6
+conda activate kintsugi
+python -c "from transformers import WhisperModel, WhisperFeatureExtractor; \
+WhisperModel.from_pretrained('openai/whisper-small.en'); \
+WhisperFeatureExtractor.from_pretrained('openai/whisper-small.en'); print('OK')"
+ls ~/.cache/huggingface/hub
+```
+
+**Resultado.** OK. Se descargaron `config.json`, `model.safetensors` (967 MB) y
+`preprocessor_config.json`. Caché en `~/.cache/huggingface/hub/models--openai--whisper-small.en`
+(home compartido entre nodos).
+
+**Hallazgo.** El nodo de cómputo (`nodea-6`) tiene salida a internet: la descarga desde Hugging
+Face corrió a ~42 MB/s. El aviso "unauthenticated requests to the HF Hub" es solo un límite de
+velocidad; no hace falta `HF_TOKEN` para este modelo público.
