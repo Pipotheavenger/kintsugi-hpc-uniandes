@@ -6,7 +6,7 @@
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-git@github.com:Pipotheavenger/kintsugi-hpc-uniandes.git}"
-REPO_DIR="${REPO_DIR:-$HOME/kintsugi-hpc-uniandes}"
+REPO_DIR="${REPO_DIR:-$HOME/Kintusgi/kintsugi-hpc-uniandes}"
 ENV_NAME="${ENV_NAME:-kintsugi}"
 ENV_FILE="envs/kipy-gpu-full.yaml"
 

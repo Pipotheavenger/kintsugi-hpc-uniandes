@@ -133,3 +133,32 @@ velocidad; no hace falta `HF_TOKEN` para este modelo público.
 - Entorno: se mantiene `module load anaconda`; la activación pasa de `source activate` a
   `eval "$(conda shell.bash hook)"` + `conda activate kintsugi`, dentro de `set +u ... set -u`
   porque los scripts de activación de conda fallan con variables no definidas bajo `set -u`.
+
+## 6. Todo listo para la primera corrida (etapa 1)
+
+Cambios hechos para que la etapa 1 corra sin tocar nada más (2026-10-21):
+
+| Archivo | Cambio | Por qué |
+|---|---|---|
+| `hpc/configs/stage1.yaml` (nuevo) | Copia de `research/stable/ordinal_regression_mtl_mar_2024/config.yaml` con: `experiment_name: stage1_smoke_synth_random`; `effective_batch_size` 128→2; `max_epochs` 32→3; `training_examples_per_eval` 16000→4; `cpus_per_worker: 4`; `df_or_dataset_version` y `audio_root` absolutos a `~/Kintusgi/Data/kintsugi_synth/stage1/random/` (train, val y test por separado); se quitaron `merge_rows_by_subject`, `"v2.11.4"`, `data_sources` y `dataset_fold`. El resto (modelo, LoRA, pérdidas, optimizador, ventanas) igual. | Datos sintéticos de la etapa 1; con 8 audios de train y batch 2 hay 4 pasos por época y una validación cada 4 ejemplos (2 por época). `cpus_per_worker`: por defecto el launcher usa todas las CPUs del nodo como workers, pero el job solo pide 8. |
+| `hpc/run_job.sbatch` | `export PYTHONPATH="$REPO_DIR"` | `scripts/launcher.py` hace `from kirad ...`; sin instalar el paquete Python no lo encuentra. |
+| `hpc/run_job.sbatch` | Se quitaron `DATA_DIR`, `RUNS_DIR` y `mkdir -p $RUNS_DIR` | No los usa el código. |
+| `hpc/run_job.sbatch` | Comentario de uso con el comando de la etapa 1 | |
+| `hpc/hypatia_sync.sh` | `REPO_DIR` → `$HOME/Kintusgi/kintsugi-hpc-uniandes` | Ubicación real del clon. |
+| `.gitignore` | `logs/`, `chkpts/` | El launcher escribe ahí (W&B en `./logs`, checkpoints en `./chkpts`) dentro del repo. |
+
+**`--experiment-dir`.** El config usa `model_path: "model.DepAnxClassifier"`, que se importa desde
+la carpeta del experimento. Como el config vive en `hpc/configs/`, se pasa
+`--experiment-dir research/stable/ordinal_regression_mtl_mar_2024` para que encuentre `model.py`.
+
+**Comando (desde `~/Kintusgi/kintsugi-hpc-uniandes`, rama `develop`).**
+
+```bash
+sbatch hpc/run_job.sbatch scripts/launcher.py train hpc/configs/stage1.yaml \
+    --experiment-dir research/stable/ordinal_regression_mtl_mar_2024
+```
+
+**Sin verificar todavía.** Nombre de la cola GPU (`-p gpu`) y del recurso (`--gres=gpu:1`): confirmar
+con `sinfo -s` antes de enviar.
+
+**Resultado.** _Pendiente._
