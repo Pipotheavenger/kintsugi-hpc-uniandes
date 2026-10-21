@@ -2,7 +2,7 @@
 # Run ON Hypatia. Mirrors GitHub `main` exactly (fast-forward only) and, on first
 # use, clones the repo and creates the conda env.
 #   bash hpc/hypatia_sync.sh            # sync only
-#   bash hpc/hypatia_sync.sh --env      # sync + (re)create conda env "$ENV_NAME" + pip install -e .
+#   bash hpc/hypatia_sync.sh --env      # sync + create conda env "$ENV_NAME" if missing (never updates it) + pip install -e .
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-git@github.com:Pipotheavenger/kintsugi-hpc-uniandes.git}"
@@ -29,8 +29,12 @@ echo "Hypatia now at: $(git log --oneline -1)"
 
 if [ "${1:-}" = "--env" ]; then
   module load anaconda
-  conda env create -n "$ENV_NAME" -f "$ENV_FILE" 2>/dev/null \
-    || conda env update -n "$ENV_NAME" -f "$ENV_FILE" --prune
+  # Never modify an existing env (no `conda env update`): only create it if missing.
+  if conda env list | awk '{print $1}' | grep -qx "$ENV_NAME"; then
+    echo "Conda env '$ENV_NAME' already exists: left untouched."
+  else
+    conda env create -n "$ENV_NAME" -f "$ENV_FILE"
+  fi
   source activate "$ENV_NAME"
   pip install -e .   # so scripts/launcher.py can import kirad
 fi
