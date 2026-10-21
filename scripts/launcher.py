@@ -203,7 +203,7 @@ def _log_to_wandb(launcher_config: LauncherConfig, launcher_logger: LauncherLogg
 
         # Log kipy and kirad info
         data = []
-        for package in ["kipy", "kirad"]:
+        for package in ["kirad"]:
             package_info = get_package_info(package)
             data.append(package_info)
         package_info_df = pd.DataFrame(data)

@@ -79,3 +79,21 @@ wandb_project = "kintsugi-hpc-uniandes"
 
 Las validaciones (`raise ValueError` si faltan) se mantienen. Pendiente para después: moverlos al
 YAML del experimento.
+
+## 3. Parche de `kipy` en el launcher
+
+**Problema.** `scripts/launcher.py`, `_log_to_wandb` (línea 206) recorre `["kipy", "kirad"]` y llama
+`get_package_info` para registrar versión y commit de cada paquete en W&B. `kipy` es un paquete
+privado de Kintsugi que no está disponible, así que la corrida falla al arrancar.
+
+**Cambio (2026-10-21).** Solo esa línea:
+
+```python
+# antes
+for package in ["kipy", "kirad"]:
+# después
+for package in ["kirad"]:
+```
+
+**Nota.** `get_package_info("kirad")` necesita encontrar `kirad`: instalado con `pip install -e .`
+en el entorno `kintsugi`, o con la variable `KINTSUGI_RAD_PATH`. Si no, falla en ese punto.
