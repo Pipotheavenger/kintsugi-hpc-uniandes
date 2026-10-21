@@ -6,7 +6,7 @@ running experiments on Hypatia. The code documentation lives in a separate, unch
 
 | File | Runs on | What it does |
 |---|---|---|
-| `hypatia_sync.sh` | Hypatia | First time: clones `main`. Then: `git pull --ff-only` so Hypatia mirrors GitHub `main` exactly. `--env` creates the `kintsugi` conda env only if it does not exist (never updates or prunes it) (from `envs/kipy-gpu-full.yaml`) and runs `pip install -e .`. |
+| `hypatia_sync.sh` | Hypatia | First time: clones `main`. Then: `git pull --ff-only` so Hypatia mirrors GitHub `main` exactly. `--env` creates the `kintsugi` conda env only if it does not exist (never updates or prunes it) (from `envs/kipy-gpu-full.yaml`). |
 | `run_job.sbatch` | Hypatia | Slurm template (queue `gpu`). Loads anaconda, activates the env, logs the commit that ran, then `python "$@"`. |
 | `make_synth_data.py` | anywhere (numpy only) | Synthetic CSV + 16 kHz WAVs that satisfy the [data contract](https://pipotheavenger.github.io/kintsugi-rad-docs/data-contract/), to test the pipeline end to end. |
 
