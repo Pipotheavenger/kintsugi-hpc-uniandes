@@ -20,10 +20,10 @@ métricas (phq > 9, > 14; gad > 4, > 9, > 14).
 **Comando (Hypatia, nodo de login).**
 
 ```bash
-module load anaconda && source activate kintsugi
-cd ~/kintsugi-hpc-uniandes
-python hpc/make_synth_data.py --mode random --n-train 8 --n-val 4 --n-test 4 \
-    --min-dur 60 --max-dur 61 --out-dir <RUTA>/kintsugi_synth/stage1
+conda activate kintsugi
+cd ~/Kintusgi
+python kintsugi-hpc-uniandes/hpc/make_synth_data.py --mode random --n-train 8 --n-val 4 --n-test 4 \
+    --min-dur 60 --max-dur 61 --out-dir Data/kintsugi_synth/stage1
 ```
 
 | | train | val | test | total |
@@ -31,4 +31,21 @@ python hpc/make_synth_data.py --mode random --n-train 8 --n-val 4 --n-test 4 \
 | Audios | 8 | 4 | 4 | 16 |
 | Esperados tras `filter_metadata` | 8 | 4 | 4 | |
 
-**Resultado.** _Pendiente: pegar la salida del comando (chequeo del contrato y ruta)._
+**Resultado (2026-10-21).** OK. Corrió en el nodo de login (16 audios, segundos; no hizo
+falta `srun`).
+
+```text
+mode=random seed=0 -> Data/kintsugi_synth/stage1/random
+  train rows=   8  after min_duration=30s filter:    8  {'phq>9': '5/8', 'phq>14': '2/8', 'gad>4': '6/8', 'gad>9': '4/8', 'gad>14': '2/8'}
+  val   rows=   4  after min_duration=30s filter:    4  {'phq>9': '2/4', 'phq>14': '1/4', 'gad>4': '3/4', 'gad>9': '2/4', 'gad>14': '1/4'}
+  test  rows=   4  after min_duration=30s filter:    4  {'phq>9': '2/4', 'phq>14': '1/4', 'gad>4': '3/4', 'gad>9': '2/4', 'gad>14': '1/4'}
+Expected rows in train after filter_metadata: 8
+```
+
+Ubicación en Hypatia: `/hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/stage1/random/`
+(`train.csv`, `val.csv`, `test.csv`, `audio/`, `manifest.json`). En el config usar esta ruta
+absoluta, no la relativa que imprime el script.
+
+**Pendientes detectados.** El repo en Hypatia está en `~/Kintusgi/kintsugi-hpc-uniandes`, no en
+`~/kintsugi-hpc-uniandes`: corregir `REPO_DIR` en `hypatia_sync.sh` y el `cd` de
+`run_job.sbatch`. El entorno se activa con `conda activate kintsugi` sin `module load anaconda`.
