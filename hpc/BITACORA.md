@@ -158,7 +158,31 @@ sbatch hpc/run_job.sbatch scripts/launcher.py train hpc/configs/stage1.yaml \
     --experiment-dir research/stable/ordinal_regression_mtl_mar_2024
 ```
 
-**Sin verificar todavía.** Nombre de la cola GPU (`-p gpu`) y del recurso (`--gres=gpu:1`): confirmar
-con `sinfo -s` antes de enviar.
+**Verificaciones previas (Hypatia).**
 
-**Resultado.** _Pendiente._
+- `sinfo -s`: la cola `gpu` existe (`nodei-gpu-[1-2]`, 15 días). También hay `gpu_economia` y `express`.
+- `scontrol show node nodei-gpu-1 | grep -i gres` → `Gres=gpu:nvidia:3`: `--gres=gpu:1` es válido.
+- `module avail anaconda` → `anaconda/conda4.12.0`, `anaconda/python3.9 (D)`.
+- Prueba de activación igual a la del sbatch (`module purge; module load anaconda; eval "$(conda shell.bash hook)";
+  conda activate kintsugi`) → `~/.conda/envs/kintsugi/bin/python`, `import torch, transformers` OK.
+
+**Resultado (2026-10-21): etapa 1 OK.** Job `781898`, nodo `nodei-gpu-2`, commit `a1bf1bd`.
+
+```text
+sacct -j 781898 → COMPLETED  ExitCode 0:0  Elapsed 00:02:12
+```
+
+- GPU usada (`GPU available: True (cuda), used: True`), AMP 16 bits, 1 proceso DDP (NCCL).
+- `filter_metadata`: train 8/8, val 4/4, test 4/4; 0 audios descartados por < 30 s.
+- Modelo: 95.6 M parámetros, 7.6 M entrenables (LoRA + cabeza), 88.1 M congelados.
+- Entrenamiento: 3 épocas × 4 batches (`Trainer.fit stopped: max_epochs=3 reached`). Hubo
+  validaciones: se guardó checkpoint en W&B (artefacto `model-0w24804i`, run `0w24804i`).
+- Test: corrió y reportó todas las métricas sin errores (p. ej. `metrics/test/auroc@0%i` 0.597,
+  `metrics/test/total_loss` 33.09). Los valores no significan nada: datos `random` y 4 audios.
+
+Criterio de la etapa 1 cumplido: corre de punta a punta, valida y evalúa en test.
+
+**Avisos vistos (no bloquean).** `precision=16` está deprecado (equivale a `16-mixed`); Lightning
+sugiere `srun` (innecesario con 1 GPU); `log_every_n_steps=5` > 4 batches por época, así que la
+pérdida de train no se registra por paso en W&B; `find_unused_parameters=True` (fijo en el launcher)
+cuesta algo de velocidad; atención "memory efficient" no determinista.
