@@ -21,7 +21,7 @@ mkdir -p "$RUNS_DIR"
 
 module purge
 module load anaconda
-source activate kipy-gpu-full
+source activate "${ENV_NAME:-kintsugi}"
 
 cd "$HOME/kintsugi-hpc-uniandes"
 echo "Running commit: $(git rev-parse --short HEAD)"   # reproducibility: log what ran

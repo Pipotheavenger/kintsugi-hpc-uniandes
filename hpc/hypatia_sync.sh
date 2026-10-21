@@ -2,12 +2,12 @@
 # Run ON Hypatia. Mirrors GitHub `main` exactly (fast-forward only) and, on first
 # use, clones the repo and creates the conda env.
 #   bash hpc/hypatia_sync.sh            # sync only
-#   bash hpc/hypatia_sync.sh --env      # sync + (re)create conda env
+#   bash hpc/hypatia_sync.sh --env      # sync + (re)create conda env "$ENV_NAME" + pip install -e .
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-git@github.com:Pipotheavenger/kintsugi-hpc-uniandes.git}"
 REPO_DIR="${REPO_DIR:-$HOME/kintsugi-hpc-uniandes}"
-ENV_NAME="${ENV_NAME:-kipy-gpu-full}"
+ENV_NAME="${ENV_NAME:-kintsugi}"
 ENV_FILE="envs/kipy-gpu-full.yaml"
 
 if [ ! -d "$REPO_DIR/.git" ]; then
@@ -31,4 +31,6 @@ if [ "${1:-}" = "--env" ]; then
   module load anaconda
   conda env create -n "$ENV_NAME" -f "$ENV_FILE" 2>/dev/null \
     || conda env update -n "$ENV_NAME" -f "$ENV_FILE" --prune
+  source activate "$ENV_NAME"
+  pip install -e .   # so scripts/launcher.py can import kirad
 fi
