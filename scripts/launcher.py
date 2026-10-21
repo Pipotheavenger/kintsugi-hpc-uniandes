@@ -135,8 +135,8 @@ def _setup_launcher(
     )
 
     launcher_config = LauncherConfig(config, experiment_dir)
-    wandb_entity = None
-    wandb_project = None
+    wandb_entity = "sebastian-valencia-world-bank-"
+    wandb_project = "kintsugi-hpc-uniandes"
     if wandb_entity is None:
         raise ValueError("Need to define `wandb_entity`.")
     if wandb_project is None:

@@ -54,3 +54,28 @@ absoluta, no la relativa que imprime el script.
 **Pendientes detectados.** El repo en Hypatia está en `~/Kintusgi/kintsugi-hpc-uniandes`, no en
 `~/kintsugi-hpc-uniandes`: corregir `REPO_DIR` en `hypatia_sync.sh` y el `cd` de
 `run_job.sbatch`. El entorno se activa con `conda activate kintsugi` sin `module load anaconda`.
+
+## 2. W&B — cuenta, login en Hypatia y entity/project en el launcher
+
+**Cuenta.** Creada en W&B (interfaz "Forge" de CoreWeave). Usuario `sebastian-valencia`,
+entity (equipo) `sebastian-valencia-world-bank-` (el guion final es parte del nombre).
+Plan: Academic trial (completar la solicitud para el plan académico gratuito).
+
+**Login en Hypatia (2026-10-21).** La API key se guardó en `~/Kintusgi/key.txt` (fuera del repo) y:
+
+```bash
+wandb login "$(cat ~/Kintusgi/key.txt)"
+# -> Appending key for api.forge.coreweave.com to your netrc file: ~/.netrc
+# -> Currently logged in as: sebastian-valencia (sebastian-valencia-world-bank-)
+```
+
+**Cambio en el código.** `scripts/launcher.py`, `_setup_launcher` (líneas 138–139): entity y
+project estaban en `None` y el launcher lanzaba `ValueError`. Se fijaron directamente en el código:
+
+```python
+wandb_entity = "sebastian-valencia-world-bank-"
+wandb_project = "kintsugi-hpc-uniandes"
+```
+
+Las validaciones (`raise ValueError` si faltan) se mantienen. Pendiente para después: moverlos al
+YAML del experimento.
