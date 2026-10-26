@@ -559,3 +559,5 @@ ambos (p. ej. train: phq>9 133/200, phq>14 66/200, gad>4 150/200, gad>9 100/200,
 
 **B1 lanzado:** job **`784465`** = `learnable`, job **`784466`** = `random`; ambos corriendo en `nodei-gpu-2`
 (una GPU cada uno).
+Runs W&B de B1: `learnable` = **`m7zvn949`**, `random` = **`h41dhdmn`**. URLs ya puestas en los `dam2_cache.yaml` de
+cada carpeta (`model-m7zvn949/best` y `model-h41dhdmn/best`); solo valen cuando B1 termine `COMPLETED`.

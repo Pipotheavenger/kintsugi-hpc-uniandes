@@ -11,7 +11,7 @@ experiment_name: dam3_stage3_random_B2_dam2_cache
 description: 'DAM 3 chain, step B2: cache DAM 2 backbone outputs (audio 768 + BERT 768) for every uuid'
 model_params:
   model_path: model.DepAnxClassifierWhisperBERT
-  ckpt_path: PENDIENTE_URL_DAM2_B1
+  ckpt_path: https://forge.coreweave.com/sebastian-valencia-world-bank-/kintsugi-hpc-uniandes/artifacts/model/model-h41dhdmn/best
   restore_training_state: false
   config:
     whisper_config:
