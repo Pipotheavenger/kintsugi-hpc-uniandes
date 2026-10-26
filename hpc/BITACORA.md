@@ -611,3 +611,38 @@ BERT de estos textos sintéticos (todos con el mismo vocabulario de relleno) se 
 refleja información útil sobre la etiqueta solo se ve en la fase 2.
 
 URLs puestas en los `dam3_phase2.yaml`: `model-a9s312dd/best` (learnable) y `model-wo4xu03t/best` (random).
+
+### 15.4 Resultado B4 (fase 2), etapa 3
+
+| | `learnable` (job 784471, run `g83unt8l`) | `random` (job 784472, run `jokgpxfk`) |
+|---|---|---|
+| Estado | COMPLETED 0:0 | COMPLETED 0:0 |
+| Tiempo / RAM | 6 min 14 s / ~18.6 GB | 4 min 15 s / ~17.4 GB |
+| AUROC test total | **0.985** | 0.630 |
+| AUROC depresión | 0.976 | 0.517 |
+| AUROC ansiedad | 0.995 | **0.805** |
+| `total_loss` test | 24.03 | 33.13 |
+
+**`learnable`: DAM 3 aprende de punta a punta.** La fase 2 solo ve audio (dos Whisper congelados + cabeza) y llega a
+AUROC 0.985.
+
+**`random`: el control de ansiedad no salió limpio (0.805). Diagnóstico.** Se regeneró localmente el conjunto
+`random` con la misma semilla (0) y se midió la correlación entre la etiqueta GAD y la señal que el generador pone en
+audio y texto (el "latente"):
+
+| Split | corr(gad, latente) | corr(phq, latente) |
+|---|---|---|
+| train (200) | -0.03 | -0.04 |
+| val (40) | **-0.48** | -0.14 |
+| test (40) | **-0.36** | +0.06 |
+
+En modo `random` etiqueta y latente se sortean de forma independiente, pero con 40 audios y la semilla 0 val y test
+quedaron, por azar, con una correlación negativa fuerte en GAD (en 2,000 simulaciones con n = 40 la desviación típica
+es 0.16; -0.48 es muy poco probable, pero fue lo que salió). Cualquier modelo cuya salida dependa del latente, aunque
+sea con una pendiente débil aprendida en train (-0.03), ordena bien el test. Por eso ansiedad da 0.805 y depresión
+(sin esa correlación) da 0.517.
+
+**Conclusión:** no es una fuga entre splits del pipeline (train no tiene relación y las etiquetas de test no se usan
+en ningún paso), es un control mal sorteado. Hay que repetir el control con otra semilla verificada (correlación
+cercana a 0 en todos los splits) antes de dar el resultado por bueno. Lección: el generador debería reportar esta
+correlación.
