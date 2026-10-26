@@ -561,3 +561,25 @@ ambos (p. ej. train: phq>9 133/200, phq>14 66/200, gad>4 150/200, gad>9 100/200,
 (una GPU cada uno).
 Runs W&B de B1: `learnable` = **`m7zvn949`**, `random` = **`h41dhdmn`**. URLs ya puestas en los `dam2_cache.yaml` de
 cada carpeta (`model-m7zvn949/best` y `model-h41dhdmn/best`); solo valen cuando B1 termine `COMPLETED`.
+
+### 15.1 Resultado B1 (DAM 2), etapa 3
+
+| | `learnable` (job 784465, run `m7zvn949`) | `random` (job 784466, run `h41dhdmn`) |
+|---|---|---|
+| Estado | COMPLETED 0:0 | COMPLETED 0:0 |
+| Tiempo | 6 min 54 s | 6 min 14 s |
+| RAM (MaxRSS) | ~15.9 GB | ~16.4 GB |
+| AUROC test total | **0.996** | **0.426** |
+| AUROC depresión | 0.997 | 0.370 |
+| AUROC ansiedad | 0.994 | 0.501 |
+| `total_loss` test | 22.02 | 32.09 |
+
+**Lectura.** DAM 2 aprende cuando hay relación entre audio/texto y etiqueta (AUROC ~1) y no aprende cuando no la hay
+(AUROC ~0.5): no hay fuga entre splits y la cadena de entrenamiento/evaluación funciona. Con 40 audios de test el
+AUROC varía bastante por azar: 0.37 en depresión con datos aleatorios es ruido, no un patrón.
+
+**Límite.** La señal sintética es fácil a propósito (el texto trae palabras que dependen directamente del rango de
+PHQ/GAD, y el audio un tono y una banda que dependen del puntaje). Un AUROC ~1 aquí prueba el pipeline, no dice nada
+de cómo le irá con voz real. Tampoco sabemos todavía qué rama (audio o texto) aportó la señal.
+
+**Costo:** con 200 audios × 8 épocas, ~6–7 min por corrida (vs 3.4 min con 16 audios × 3 épocas).
