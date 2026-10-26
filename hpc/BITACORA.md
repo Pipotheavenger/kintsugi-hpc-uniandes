@@ -432,3 +432,21 @@ segmento `/wandb/` extra. `kirad/utils.py:get_wandb_run_name_tag_from_artifact_u
 6–7 partes: `<host>/<entity>/<project>/artifacts/<tipo>/<nombre>/<tag>`. Con `/wandb/` serían 8 y falla. Hay que
 escribir las URLs **sin** `/wandb/`; el host se ignora, solo cuentan las posiciones. El artefacto del modelo se llama
 `model-<id de la corrida>` (lo crea `WandbLogger` con `log_model=True`), con alias `best`.
+
+## 12. DAM 3, paso B2: caché de DAM 2 (2026-10-26)
+
+**Job `784413`**, run W&B **`0lxldli5`** (`dam3_stage1_B2_dam2_cache`), commit `9cb047a`, modo `cache`.
+
+```text
+sacct → COMPLETED  ExitCode 0:0  Elapsed 00:01:16  MaxRSS 2,433,344K (~2.4 GB)
+```
+
+- Descargó el modelo de B1 desde W&B: `Downloading large artifact 'model-r2zzy01k:best', 804.15MB`. Primera vez que el
+  código usa una URL de W&B: funcionó con el formato sin `/wandb/`.
+- Cargó los pesos completos: no aparece "Performing partial initialization" ni errores en el log.
+- Pasó los 16 audios por DAM 2 (train 4 batches, val 2, test 2): `Global cache size: 16`.
+- Subió el artefacto `backbone_cache-0lxldli5` (tag `v0`).
+- Costo de B2 con 16 audios: 1 min 16 s, ~2.4 GB de RAM (la mayor parte, cargar el modelo).
+
+**URL del caché para B3 (en `dam3_phase1.yaml`, `backbone_cache`):**
+`https://forge.coreweave.com/sebastian-valencia-world-bank-/kintsugi-hpc-uniandes/artifacts/backbone_cache/backbone_cache-0lxldli5/v0`
