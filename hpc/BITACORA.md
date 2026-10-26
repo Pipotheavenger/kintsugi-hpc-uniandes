@@ -186,3 +186,40 @@ Criterio de la etapa 1 cumplido: corre de punta a punta, valida y evalúa en tes
 sugiere `srun` (innecesario con 1 GPU); `log_every_n_steps=5` > 4 batches por época, así que la
 pérdida de train no se registra por paso en W&B; `find_unused_parameters=True` (fijo en el launcher)
 cuesta algo de velocidad; atención "memory efficient" no determinista.
+
+## 7. Revisión de DAM 3: qué pide y cuánto cuesta (2026-10-26)
+
+Tarea acordada con Ignacio en la llamada del 22 de octubre. Fuente: `research/stable/ordinal_regression_mtl_aug_2024/`
+(`model.py`, `config.yaml`, `config_llma.yaml`, `config_dam3.0.yaml`, `config_llma_dam3.0.yaml`) y la documentación
+(`docs/experiments.md`, `docs/limitations.md` del repo de docs).
+
+**Qué es.** En inferencia solo usa audio, pero para entrenarlo hace falta una cadena de modelos:
+
+| Paso | Qué se entrena / corre | Clase / config | Necesita |
+|---|---|---|---|
+| 0 | Transcripciones ASR | `scripts/run_whisper_asr.py` (Whisper large-v3, `language="en"` fijo) | audio |
+| 1 | DAM 2: Whisper + BERT, ambos con LoRA | `jun_2024`, `DepAnxClassifierWhisperBERT` | audio + transcripción (`<text_root>/<filename>.json`, campo `text`) |
+| 2 | Caché de salidas de DAM 2 | `launcher.py cache` | checkpoint de DAM 2 (W&B) |
+| 3 | Fase 1, `WhisperLLMA`: Whisper fine-tune completo para imitar (MSE) la mitad BERT `[768:1536]` del caché | `config_llma.yaml` | caché del paso 2 (`backbone_cache`, W&B URL) |
+| 4 | Fase 2, `DepAnxClassifier`: Whisper y WhisperLLMA congelados, se entrena solo la cabeza | `config.yaml` | `llma_ckpt` del paso 3 (W&B URL) |
+
+**Impacto en el contrato de datos (además de lo de DAM 1).**
+
+- Para entrenar (pasos 0–3) hacen falta **transcripciones**: columna `asr_output_id` y un JSON por audio en `text_root`.
+  En inferencia no.
+- Todo el texto está pensado en inglés: ASR con `language="en"`, `bert-base-uncased` y `whisper-small.en`. Con audio
+  en español habría que cambiar esas tres piezas.
+- `ideal_logmel_energies: "logmel_energies.npy"` es obligatorio en DAM 2/3 y no está en el repo: hay que calcularlo
+  con nuestros datos o quitar la clave.
+- Fase 1 usa `max_duration: 90` en train (memoria); fase 2 usa `pad_last_chunk_to_full: true` (rellena la última
+  ventana). Mínimo de 30 s y 16 kHz, igual que DAM 1.
+
+**Bloqueos en los configs (docs/limitations.md 5–9).** `audio_dir_or_feature_store_bucket` y `text_dir` no son
+campos válidos (usar `audio_root` / `text_root`); falta `logmel_energies.npy`; `llma_ckpt` y `backbone_cache` son
+placeholders `<wandb_url_...>` que se llenan con nuestras propias corridas; los textos leen `asr_output_id`.
+
+**Costo en Hypatia.** No medido. Comparado con DAM 1 son 4 corridas en serie en vez de 1; la fase 1 entrena todo el
+encoder de Whisper small (no solo LoRA), mucho más que los 7.6 M de DAM 1; el ASR con large-v3 es una pasada extra
+sobre todo el audio. Todo usa Whisper small o BERT base, así que debería caber en 1 GPU. Propuesta: medir cada paso
+con datos sintéticos pequeños, como en la etapa 1. Para DAM 2 hacen falta transcripciones sintéticas (los audios
+sintéticos no tienen voz).
