@@ -402,3 +402,7 @@ excepción `!hpc/configs/dam2_cache.yaml`.
 python kintsugi-hpc-uniandes/hpc/make_synth_data.py --mode random --n-train 8 --n-val 4 --n-test 4 \
     --min-dur 60 --max-dur 60 --with-text --out-dir Data/kintsugi_synth/dam3_stage1
 ```
+
+**Datos de la etapa (2026-10-26).** Hypatia actualizada a `afa226f`; generados con el comando anterior en
+`~/Kintusgi/Data/kintsugi_synth/dam3_stage1/random/` (audio + `text/`): train 8, val 4, test 4, todos de 60 s,
+0 descartados por el filtro de 30 s, todos los cortes de PHQ/GAD cubiertos en cada split. Chequeo del contrato OK.
