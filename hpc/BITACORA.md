@@ -552,3 +552,10 @@ URLs de W&B reiniciadas a `PENDIENTE_...` (no deben heredarse de la etapa 1).
 | B1 DAM 2 | pérdida baja en train y val; AUROC de test claramente > 0.5 | val no mejora; AUROC ~0.5 |
 | B3 fase 1 | MSE de val baja | MSE baja (imita a BERT igual), pero sin información de la etiqueta |
 | B4 fase 2 | val mejora; AUROC de test claramente > 0.5 | val no mejora; AUROC ~0.5 (si mejora: fuga) |
+
+**Datos generados (2026-10-26)** en un `srun` (`nodea-6`): `dam3_stage3_learnable/learnable/` y
+`dam3_stage3_random/random/`, 200/40/40 cada uno, 60 s, con texto, 0 descartados, misma distribución de etiquetas en
+ambos (p. ej. train: phq>9 133/200, phq>14 66/200, gad>4 150/200, gad>9 100/200, gad>14 50/200). Contrato OK.
+
+**B1 lanzado:** job **`784465`** = `learnable`, job **`784466`** = `random`; ambos corriendo en `nodei-gpu-2`
+(una GPU cada uno).
