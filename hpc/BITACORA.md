@@ -240,3 +240,10 @@ Implicaciones:
 **Entorno:** `import whisper_timestamped` → `ModuleNotFoundError`. Solo hace falta para el paso B0 (ASR de datos
 reales); la cadena con datos sintéticos no lo usa. Al instalarlo, revisar antes con `pip install --dry-run` que no
 reemplace `torch` por una versión CUDA 12.
+
+**Revisión de dependencias (2026-10-26).**
+
+- `pip install whisper-timestamped==1.15.8 --dry-run`: solo instalaría `whisper-timestamped`; todas sus dependencias
+  ya están (`openai-whisper 20250625`, `dtw-python`, `Cython`) y `torch` se queda en **2.7.1+cu118**. Seguro de instalar.
+- `import peft, transformers` → OK, **transformers 5.20.1**. DAM 1 corrió con esta versión (rama Whisper); la rama
+  BERT de DAM 2 todavía no se ha probado con transformers 5.
