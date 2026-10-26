@@ -406,3 +406,29 @@ python kintsugi-hpc-uniandes/hpc/make_synth_data.py --mode random --n-train 8 --
 **Datos de la etapa (2026-10-26).** Hypatia actualizada a `afa226f`; generados con el comando anterior en
 `~/Kintusgi/Data/kintsugi_synth/dam3_stage1/random/` (audio + `text/`): train 8, val 4, test 4, todos de 60 s,
 0 descartados por el filtro de 30 s, todos los cortes de PHQ/GAD cubiertos en cada split. Chequeo del contrato OK.
+
+## 11. DAM 3, paso B1: DAM 2 entrenado (2026-10-26)
+
+**Job `784410`**, run W&B **`r2zzy01k`** (`dam3_stage1_B1_dam2`), commit `afa226f`.
+
+```text
+sacct → COMPLETED  ExitCode 0:0  Elapsed 00:03:24  MaxRSS 14,810,832K (~14.8 GB de RAM del nodo)
+```
+
+- Datos: train 8/8, val 4/4, test 4/4 (0 descartados). El tokenizer y el modelo BERT cargaron con transformers 5.20.1.
+- 3 épocas × 4 batches; validaciones durante el entrenamiento; test completo.
+- Test (sin significado, datos `random` y 4 audios): `metrics/test/auroc@0%i` 0.610, depresión 0.583,
+  ansiedad 0.639, `metrics/test/total_loss` 33.21.
+- Aviso nuevo, no bloquea: *"Skipping evaluation of threshold method 'coral' because its thresholds [...] are not
+  sorted"*: con 3 épocas los umbrales CORAL aprendidos siguen casi en 0 y desordenados, así que ese método de umbral
+  se salta; los demás se evalúan.
+- Costo de B1 con 16 audios: 3 min 24 s, ~14.8 GB de RAM (el sbatch pide 32 GB).
+
+**URL del modelo para B2 (en `dam2_cache.yaml`, `ckpt_path`):**
+`https://forge.coreweave.com/sebastian-valencia-world-bank-/kintsugi-hpc-uniandes/artifacts/model/model-r2zzy01k/best`
+
+**Formato de URLs de W&B (importante).** La interfaz muestra `https://forge.coreweave.com/wandb/<entity>/...`, con un
+segmento `/wandb/` extra. `kirad/utils.py:get_wandb_run_name_tag_from_artifact_url` parte la URL por `/` y exige
+6–7 partes: `<host>/<entity>/<project>/artifacts/<tipo>/<nombre>/<tag>`. Con `/wandb/` serían 8 y falla. Hay que
+escribir las URLs **sin** `/wandb/`; el host se ignora, solo cuentan las posiciones. El artefacto del modelo se llama
+`model-<id de la corrida>` (lo crea `WandbLogger` con `log_model=True`), con alias `best`.
