@@ -478,3 +478,40 @@ entrenamiento ni qué checkpoint es el mejor.
 
 **URL para B4 (en `dam3_phase2.yaml`, `llma_ckpt`):**
 `https://forge.coreweave.com/sebastian-valencia-world-bank-/kintsugi-hpc-uniandes/artifacts/model/model-6xlyjmro/best`
+
+## 14. DAM 3, paso B4: fase 2 y cadena completa (2026-10-26)
+
+**Job `784460`**, run W&B **`lg6r142h`** (`dam3_stage1_B4_phase2`), commit `55cfa7a`.
+
+```text
+sacct → COMPLETED  ExitCode 0:0  Elapsed 00:02:28  MaxRSS 3,440,784K (~3.4 GB)
+```
+
+- Cargó el modelo de la fase 1 (`model-6xlyjmro:best`) con `strict=True` sin error (la carga ocurre al construir
+  el modelo; si un peso no coincidiera, el job habría fallado antes de entrenar).
+- Datos 8/4/4; 3 épocas; validaciones; test completo.
+- Sin los avisos de `find_unused_parameters` ni de atención no determinista de B1/B3: coherente con que los dos
+  Whisper están congelados y solo se entrena la cabeza.
+- Test (sin significado: datos `random`, 4 audios por split): `metrics/test/auroc@0%i` 0.653, depresión 0.792,
+  ansiedad 0.556, `total_loss` 33.07.
+
+### Resultado: la cadena de DAM 3 corre de punta a punta en Hypatia
+
+| Paso | Qué hace | Job | Run W&B → artefacto | Tiempo | RAM (MaxRSS) |
+|---|---|---|---|---|---|
+| B1 | Entrena DAM 2 (Whisper + BERT, LoRA) | 784410 | `r2zzy01k` → `model-r2zzy01k:best` | 3 min 24 s | ~14.8 GB |
+| B2 | Caché de DAM 2 (audio + BERT por ventana) | 784413 | `0lxldli5` → `backbone_cache-0lxldli5:v0` | 1 min 16 s | ~2.4 GB |
+| B3 | Fase 1: `WhisperLLMA` (Whisper completo, MSE a la mitad BERT) | 784453 | `6xlyjmro` → `model-6xlyjmro:best` | 2 min 28 s | ~16.5 GB |
+| B4 | Fase 2: cabeza PHQ/GAD sobre Whisper + WhisperLLMA congelados | 784460 | `lg6r142h` | 2 min 28 s | ~3.4 GB |
+| | **Total cadena** | | | **~9.5 min** | pico ~16.5 GB |
+
+GPU: Quadro RTX 6000 (24 GB), 1 GPU por paso. Con 16 audios los tiempos miden sobre todo el costo fijo (cargar
+modelos, descargar artefactos de W&B), no el de entrenar con datos reales.
+
+**Lo que hizo falta para que corriera** (pasos 8–13): `whisper-timestamped` instalado; `logmel_energies.npy` desde la
+constante de DAM 1; transcripciones sintéticas (`--with-text`); cuatro configs con las claves inválidas de upstream
+corregidas; caché generado con las mismas ventanas que la fase 1; URLs de W&B sin el segmento `/wandb/`; excepción
+en `.gitignore` para `dam2_cache.yaml`.
+
+**Siguiente:** prueba con señal (~280 audios `learnable` con texto) y control (`random`, mismo tamaño), para ver si
+la cadena aprende y para medir el costo real por paso.
