@@ -28,7 +28,7 @@ model_params:
         - conv1
         - conv2
         bias: all
-    llma_ckpt: PENDIENTE_URL_LLMA_B3
+    llma_ckpt: https://forge.coreweave.com/sebastian-valencia-world-bank-/kintsugi-hpc-uniandes/artifacts/model/model-a9s312dd/best
     classifier_config:
       shared_projection_dim:
       - 256

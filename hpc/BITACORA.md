@@ -594,3 +594,20 @@ de cómo le irá con voz real. Tampoco sabemos todavía qué rama (audio o texto
 
 URLs puestas en los `dam3_phase1.yaml` de cada carpeta: `backbone_cache-f3brbzbb/v0` (learnable) y
 `backbone_cache-idiokrs1/v0` (random).
+
+### 15.3 Resultado B3 (fase 1, `WhisperLLMA`), etapa 3
+
+| | `learnable` (job 784469, run `a9s312dd`) | `random` (job 784470, run `wo4xu03t`) |
+|---|---|---|
+| Estado | COMPLETED 0:0 | COMPLETED 0:0 |
+| Tiempo / RAM | 5 min 04 s / ~17.5 GB | 4 min 58 s / ~15.3 GB |
+| Audios fuera del caché | 0 (train, val, test) | 0 (train, val, test) |
+| MSE test (`total_loss`) | **0.0029** | **0.0031** |
+
+**Lectura.** Las dos imitan muy bien la mitad BERT del caché (MSE ~0.003, frente a 0.136 en la etapa 1 con 16 audios y
+3 épocas). Es lo esperado: la fase 1 no usa etiquetas, solo aprende a reproducir con el audio lo que BERT sacó del
+texto, así que ambas pruebas se ven iguales aquí. Ojo: una MSE tan baja también puede deberse a que los vectores de
+BERT de estos textos sintéticos (todos con el mismo vocabulario de relleno) se parecen mucho entre sí; si la MSE
+refleja información útil sobre la etiqueta solo se ve en la fase 2.
+
+URLs puestas en los `dam3_phase2.yaml`: `model-a9s312dd/best` (learnable) y `model-wo4xu03t/best` (random).
