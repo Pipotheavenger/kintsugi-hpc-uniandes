@@ -223,3 +223,20 @@ encoder de Whisper small (no solo LoRA), mucho más que los 7.6 M de DAM 1; el A
 sobre todo el audio. Todo usa Whisper small o BERT base, así que debería caber en 1 GPU. Propuesta: medir cada paso
 con datos sintéticos pequeños, como en la etapa 1. Para DAM 2 hacen falta transcripciones sintéticas (los audios
 sintéticos no tienen voz).
+
+## 8. DAM 3, paso A1: hardware y entorno (2026-10-26)
+
+**GPU de la cola `gpu`** (`srun -p gpu --gres=gpu:1 nvidia-smi`): **NVIDIA Quadro RTX 6000, 24 GB** (23,040 MiB),
+arquitectura Turing. Driver 520.61.05, **CUDA 11.8** (máximo que soporta el driver).
+
+Implicaciones:
+
+- 24 GB alcanzan para Whisper small, BERT base y el fine-tune completo del encoder de Whisper small (fase 1) con
+  `batch_size` 1–2.
+- Turing soporta fp16 (lo que usa el launcher) pero no bf16 ni FlashAttention 2 (`flash-attn` del env no sirve en
+  esta GPU; DAM 1/2/3 no lo necesitan).
+- Cualquier paquete compilado para CUDA 12 no corre con este driver.
+
+**Entorno:** `import whisper_timestamped` → `ModuleNotFoundError`. Solo hace falta para el paso B0 (ASR de datos
+reales); la cadena con datos sintéticos no lo usa. Al instalarlo, revisar antes con `pip install --dry-run` que no
+reemplace `torch` por una versión CUDA 12.
