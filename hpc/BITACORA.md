@@ -248,30 +248,105 @@ reemplace `torch` por una versión CUDA 12.
 - `import peft, transformers` → OK, **transformers 5.20.1**. DAM 1 corrió con esta versión (rama Whisper); la rama
   BERT de DAM 2 todavía no se ha probado con transformers 5.
 
-## 9. DAM 3, paso A2: `logmel_energies.npy` (2026-10-26)
+## 9. DAM 3, paso A2: `logmel_energies.npy`, el perfil espectral de referencia (2026-10-26)
 
-**Qué es.** Un vector de 80 números, uno por banda del log-mel que ve Whisper. Es el "perfil espectral ideal": la
-energía promedio que debería tener cada banda.
+### 9.1 Qué es
 
-**Qué hace el código con él.** Por cada ventana de 30 s y cada banda, resta el promedio en el tiempo de esa banda y
-suma el valor ideal: `features += ideal - features.mean(dim=tiempo)`. Así toda ventana queda con el mismo perfil
-promedio; se quita la "coloración" del micrófono, el teléfono o la sala, y queda la variación en el tiempo (la voz).
+Antes de entrar a Whisper, cada ventana de 30 s se convierte en un **log-mel**: una matriz de **80 bandas de
+frecuencia × 3000 instantes** (uno cada 10 ms). Cada celda es la energía, en escala logarítmica, de esa banda en ese
+instante. Las bandas van de graves (banda 0) a agudos (banda 79), repartidas en escala mel (como las percibe el oído),
+entre 0 y 8 kHz.
 
-- DAM 1 lo hace dentro del modelo, en GPU, con la constante `IDEAL_LOGMEL_ENERGIES` (`kirad/constants.py:149`,
-  usada en `kirad/feature_extraction_whisper.py:132-134`).
-- DAM 2 y 3 lo hacen en el dataset (`kirad/datasets_and_dataloaders.py:749-753`) con la misma operación, pero leen
-  los valores de un archivo (`ideal_logmel_energies: "logmel_energies.npy"`), que no viene en el repo.
-- Además, `scripts/launcher.py:224` hace `np.load()` de ese valor para subirlo a W&B: tiene que ser una ruta a un
-  `.npy`, no una lista en el YAML.
+`logmel_energies.npy` es un vector de **80 números, uno por banda**: la energía promedio que "debería" tener cada
+banda. Es un **perfil espectral de referencia**.
 
-**Cómo se generó.** Se leyó la constante del código fuente (con `ast`, sin importar `kirad`) y se guardó tal cual:
-`hpc/configs/logmel_energies.npy`, forma `(80,)`, `float32`, idéntico a la constante (`np.array_equal` = True).
-Valores: mín 0.0375 (banda 79), máx 0.9844 (banda 5), media 0.477; más energía en bandas bajas, cae en las altas.
+### 9.2 Qué hace el código con él
 
-**Por qué así.** Con la constante, DAM 2/3 normalizan exactamente igual que DAM 1, que ya corrió.
-**No verificado:** que sea igual al `logmel_energies.npy` privado de Kintsugi. Preguntarles, o recalcularlo con
-nuestros datos reales.
+Por cada ventana y cada banda: calcula el promedio en el tiempo de esa banda, lo resta y suma el valor de referencia.
 
-**Uso en los configs (para A4).** Poner la ruta **absoluta**
-`/hpcfs/home/ing_quimica/sf.valencia/Kintusgi/kintsugi-hpc-uniandes/hpc/configs/logmel_energies.npy`: una ruta
+```text
+features[banda, t] += ideal[banda] - promedio_t(features[banda, :])
+```
+
+Resultado: todas las ventanas de todas las grabaciones quedan con **el mismo perfil promedio**, y se conserva intacta
+la variación en el tiempo, que es lo que aporta la voz.
+
+| Modelo | Dónde se aplica | De dónde salen los 80 valores |
+|---|---|---|
+| DAM 1 (`config.yaml` actual) | Dentro del modelo, en GPU: `kirad/feature_extraction_whisper.py:132-134` | Constante `IDEAL_LOGMEL_ENERGIES`, `kirad/constants.py:149` |
+| DAM 1 (`config_dam1.0.yaml`, versión vieja) | En el dataset | Archivo `logmel_energies.npy` (línea 100) |
+| DAM 2 y DAM 3 | En el dataset: `kirad/datasets_and_dataloaders.py:749-753` (misma operación) | Archivo `logmel_energies.npy` (privado, no viene en el repo) |
+
+Además, `scripts/launcher.py:224` hace `np.load()` de ese valor para registrarlo en W&B, así que en el YAML tiene que
+ser **una ruta a un `.npy`**, no una lista de números.
+
+### 9.3 Por qué es importante
+
+Cada grabación trae el "color" del micrófono, el teléfono, la sala o la distancia (un celular corta graves, un
+micrófono barato realza agudos, el eco engorda ciertas bandas). Ese color es constante durante la grabación, así que
+vive en el promedio de cada banda. Reemplazar ese promedio por el perfil de referencia:
+
+1. **Hace que el modelo aprenda de la voz y no del aparato.** Sin esto, el modelo podría usar el tipo de dispositivo
+   como atajo (p. ej. si un grupo con PHQ alto se grabó con el mismo teléfono). Es el mismo riesgo que mezclar audio de
+   8 y 16 kHz.
+2. **Hace comparables grabaciones de distintas fuentes**, clave si BRIDGE-MH junta países o dispositivos.
+3. **Deja la entrada en el rango que Whisper espera**: no la centra en cero, la lleva a un perfil parecido al de la
+   voz con la que Whisper fue preentrenado.
+
+### 9.4 Los valores que Kintsugi dejó fijos para DAM 1
+
+Escala del log-mel de Whisper (`(log10 + 4) / 4`). Frecuencias aproximadas calculadas por nosotros con la escala mel
+"slaney" de 80 bandas entre 0 y 8 kHz que usa el código (no vienen en el repo).
+
+| Bandas | Frecuencia aprox. | Valores |
+|---|---|---|
+| 0–9 | 40–370 Hz | 0.349 0.586 0.791 0.928 **0.983 0.984** 0.960 0.939 0.937 0.932 |
+| 10–19 | 400–750 Hz | 0.916 0.893 0.864 0.833 0.800 0.778 0.756 0.730 0.704 0.680 |
+| 20–29 | 780–1,150 Hz | 0.658 0.635 0.614 0.592 0.572 0.552 0.537 0.522 0.510 0.499 |
+| 30–39 | 1.2–1.9 kHz | 0.489 0.478 0.468 0.473 0.463 0.448 0.467 0.451 0.464 0.449 |
+| 40–49 | 2–2.9 kHz | 0.455 0.437 0.432 0.422 0.412 0.401 0.393 0.388 0.384 0.385 |
+| 50–59 | 3–4.3 kHz | 0.382 0.377 0.372 0.365 0.354 0.343 0.328 0.314 0.306 0.296 |
+| 60–69 | 4.5–6.3 kHz | 0.293 0.286 0.275 0.269 0.258 0.248 0.241 0.234 0.225 0.209 |
+| 70–79 | 6.5–7.9 kHz | 0.194 0.183 0.176 0.171 0.166 0.159 0.143 0.118 0.080 **0.037** |
+
+Mín 0.0375 (banda 79), máx 0.9844 (banda 5), media 0.477. Forma: bajo en la banda 0 (casi no hay voz a 40 Hz), **pico
+en las bandas 4–5 (~190–220 Hz, tono fundamental de la voz y primeros armónicos)** y caída gradual hacia 8 kHz. Es la
+forma típica del espectro promedio de la voz humana.
+
+### 9.5 Por qué está fijo en el código (hechos vs. inferencias)
+
+**Hechos (en el código):**
+
+- No hay ningún comentario que explique el origen de los valores. En la documentación lo anotamos como "perfil fijo
+  de origen desconocido" (`docs/hardcoded.md` del repo de docs).
+- La versión vieja de DAM 1 (`config_dam1.0.yaml`) leía el archivo desde el dataset, como DAM 2/3.
+- La versión actual de DAM 1 calcula el log-mel dentro del modelo (`preprocessor: false`) con la constante, y
+  `kirad/feature_extraction_whisper.py:78` dice: *"To enable model compilation, ideal_logmel_energies should be
+  registered as a buffer"*. El launcher tiene un modo `compile` que exporta el modelo a `.pt2`.
+
+**Inferencias (no confirmadas con Kintsugi):**
+
+1. **Origen de los números:** muy probablemente es el promedio del log-mel por banda sobre muchas grabaciones de sus
+   datos de entrenamiento (inglés, EE. UU., sus dispositivos). Es la forma estándar de construir este perfil y la
+   curva tiene exactamente esa forma.
+2. **Por qué lo fijaron:** para que el modelo exportado sea **autocontenido**: el `.pt2` lleva la normalización dentro y
+   en producción no hay que cargar un archivo aparte ni arriesgarse a usar uno equivocado. De paso, el log-mel en GPU
+   es más rápido.
+3. Es casi seguro que la constante es el contenido del mismo `logmel_energies.npy` que antes leía el dataset.
+
+### 9.6 Qué hicimos
+
+- `hpc/configs/logmel_energies.npy`: los 80 valores de la constante, `float32`, forma `(80,)`, idénticos a
+  `IDEAL_LOGMEL_ENERGIES` (`np.array_equal` = True). Así DAM 2/3 normalizan **exactamente igual que DAM 1**, que ya corrió.
+- `hpc/make_logmel_energies.py`: lo regenera desde la constante (lee `kirad/constants.py` con `ast`, solo necesita
+  numpy). `python hpc/make_logmel_energies.py` produce un archivo idéntico al del commit.
+
+**Uso en los configs:** ruta **absoluta**
+`/hpcfs/home/ing_quimica/sf.valencia/Kintusgi/kintsugi-hpc-uniandes/hpc/configs/logmel_energies.npy`. Una ruta
 relativa se resuelve contra `--experiment-dir` (la carpeta de `research/`), no contra `hpc/configs/`.
+
+### 9.7 Pendiente para datos reales
+
+El perfil refleja el audio de Kintsugi. Para BRIDGE-MH (otro idioma, otros dispositivos, otros países) lo correcto
+sería **recalcularlo con el promedio por banda de nuestros datos reales** (mismo log-mel que usa el código) o, al
+menos, preguntar a Kintsugi cómo lo calcularon. Para las pruebas con datos sintéticos, la constante es suficiente.
