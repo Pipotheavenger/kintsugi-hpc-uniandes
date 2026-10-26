@@ -247,3 +247,31 @@ reemplace `torch` por una versión CUDA 12.
   ya están (`openai-whisper 20250625`, `dtw-python`, `Cython`) y `torch` se queda en **2.7.1+cu118**. Seguro de instalar.
 - `import peft, transformers` → OK, **transformers 5.20.1**. DAM 1 corrió con esta versión (rama Whisper); la rama
   BERT de DAM 2 todavía no se ha probado con transformers 5.
+
+## 9. DAM 3, paso A2: `logmel_energies.npy` (2026-10-26)
+
+**Qué es.** Un vector de 80 números, uno por banda del log-mel que ve Whisper. Es el "perfil espectral ideal": la
+energía promedio que debería tener cada banda.
+
+**Qué hace el código con él.** Por cada ventana de 30 s y cada banda, resta el promedio en el tiempo de esa banda y
+suma el valor ideal: `features += ideal - features.mean(dim=tiempo)`. Así toda ventana queda con el mismo perfil
+promedio; se quita la "coloración" del micrófono, el teléfono o la sala, y queda la variación en el tiempo (la voz).
+
+- DAM 1 lo hace dentro del modelo, en GPU, con la constante `IDEAL_LOGMEL_ENERGIES` (`kirad/constants.py:149`,
+  usada en `kirad/feature_extraction_whisper.py:132-134`).
+- DAM 2 y 3 lo hacen en el dataset (`kirad/datasets_and_dataloaders.py:749-753`) con la misma operación, pero leen
+  los valores de un archivo (`ideal_logmel_energies: "logmel_energies.npy"`), que no viene en el repo.
+- Además, `scripts/launcher.py:224` hace `np.load()` de ese valor para subirlo a W&B: tiene que ser una ruta a un
+  `.npy`, no una lista en el YAML.
+
+**Cómo se generó.** Se leyó la constante del código fuente (con `ast`, sin importar `kirad`) y se guardó tal cual:
+`hpc/configs/logmel_energies.npy`, forma `(80,)`, `float32`, idéntico a la constante (`np.array_equal` = True).
+Valores: mín 0.0375 (banda 79), máx 0.9844 (banda 5), media 0.477; más energía en bandas bajas, cae en las altas.
+
+**Por qué así.** Con la constante, DAM 2/3 normalizan exactamente igual que DAM 1, que ya corrió.
+**No verificado:** que sea igual al `logmel_energies.npy` privado de Kintsugi. Preguntarles, o recalcularlo con
+nuestros datos reales.
+
+**Uso en los configs (para A4).** Poner la ruta **absoluta**
+`/hpcfs/home/ing_quimica/sf.valencia/Kintusgi/kintsugi-hpc-uniandes/hpc/configs/logmel_energies.npy`: una ruta
+relativa se resuelve contra `--experiment-dir` (la carpeta de `research/`), no contra `hpc/configs/`.
