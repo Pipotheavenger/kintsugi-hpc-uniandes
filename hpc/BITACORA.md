@@ -450,3 +450,31 @@ sacct → COMPLETED  ExitCode 0:0  Elapsed 00:01:16  MaxRSS 2,433,344K (~2.4 GB)
 
 **URL del caché para B3 (en `dam3_phase1.yaml`, `backbone_cache`):**
 `https://forge.coreweave.com/sebastian-valencia-world-bank-/kintsugi-hpc-uniandes/artifacts/backbone_cache/backbone_cache-0lxldli5/v0`
+
+## 13. DAM 3, paso B3: fase 1 (`WhisperLLMA`) (2026-10-26)
+
+Se lanzó dos veces (mismo config): job **`784414`** (09:06, 2 min 17 s, ~15.0 GB RAM) y job **`784453`**
+(10:24, 2 min 28 s, ~16.5 GB RAM), ambos `COMPLETED 0:0`. Se usa la **segunda**: run W&B **`6xlyjmro`**.
+
+- Descargó el caché de B2 y `Filtered out 0 files that are not in the backbone cache`.
+- No hubo error de `broadcast_collate`: el número de vectores del caché coincide con las ventanas de audio (gracias a
+  generar el caché con `all` + `pad_last_chunk_to_full`, paso 10).
+- 3 épocas, validaciones, test completo: `metrics/test/total_loss` (MSE contra la mitad BERT del caché) = **0.136**.
+- Artefacto `model-6xlyjmro` (alias `best`). El aviso *"already exists with the same content"* aparece porque el
+  mejor checkpoint y el último son el mismo archivo.
+
+**Carpeta de checkpoints compartida.** Como ambas corridas tienen el mismo `experiment_name`, las dos escribieron en
+`chkpts/dam3_stage1_B3_phase1_llma/` (Lightning avisa *"exists and is not empty"* y agrega `-v1` a los archivos de la
+segunda). No afecta lo que se usa después: cada corrida sube a W&B sus propios checkpoints, y la fase 2 lee el de
+`6xlyjmro` desde W&B. Cada checkpoint pesa ~1 GB (encoder completo de Whisper), conviene limpiar la carpeta de vez en
+cuando. Para no mezclar corridas, cambiar `experiment_name` en cada repetición.
+
+**Detalle cosmético del launcher.** Los checkpoints se llaman `epoch-2_metric-0.000.ckpt`: en `scripts/launcher.py`
+el nombre se arma con `filename="epoch-{epoch}_metric-{monitor_loss_name:.3f}"`, que no es un f-string, así que
+Lightning busca una métrica llamada literalmente `monitor_loss_name`, no la encuentra y pone 0.000. No afecta el
+entrenamiento ni qué checkpoint es el mejor.
+
+**Costo de B3 con 16 audios:** ~2.5 min, ~16.5 GB de RAM.
+
+**URL para B4 (en `dam3_phase2.yaml`, `llma_ckpt`):**
+`https://forge.coreweave.com/sebastian-valencia-world-bank-/kintsugi-hpc-uniandes/artifacts/model/model-6xlyjmro/best`
