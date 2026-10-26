@@ -1,0 +1,94 @@
+# DAM 3 chain, step B4: phase 2 (classifier). Based on research/stable/ordinal_regression_mtl_aug_2024/config.yaml.
+#   - llma_ckpt: W&B URL of the phase 1 model from step B3 (model-<run>/best). PENDING until B3 runs.
+#   - ckpt_path stays "" as upstream: the audio Whisper is the pretrained HF encoder (open question for Kintsugi).
+#   - ideal_logmel_energies absolute path; small batches/epochs.
+# Run:  sbatch hpc/run_job.sbatch scripts/launcher.py train hpc/configs/dam3_phase2.yaml --experiment-dir research/stable/ordinal_regression_mtl_aug_2024
+---
+experiment_name: dam3_stage1_B4_phase2
+description: 'DAM 3 chain, step B4: frozen Whisper + frozen WhisperLLMA, train head only, synthetic data'
+model_params:
+  model_path: model.DepAnxClassifier
+  ckpt_path: ''
+  restore_training_state: false
+  config:
+    whisper_config:
+      model: openai/whisper-small.en
+      hf_config:
+        encoder_layerdrop: 0.0
+        dropout: 0.0
+        activation_dropout: 0.0
+      lora_params:
+        r: 32
+        lora_alpha: 64.0
+        target_modules: all-linear
+        lora_dropout: 0.4
+        modules_to_save:
+        - conv1
+        - conv2
+        bias: all
+    llma_ckpt: PENDIENTE_URL_LLMA_B3
+    classifier_config:
+      shared_projection_dim:
+      - 256
+      - 64
+      tasks:
+        depression:
+          proj_dim: 128
+          dropout: 0.4
+        anxiety:
+          proj_dim: 128
+          dropout: 0.4
+training_params:
+  seed: 46
+  batch_size: 1
+  effective_batch_size: 2
+  max_epochs: 3
+  early_stopping_patience: 10
+  monitor_loss: max:metrics/val/sn_eq_sp@0%i
+  training_examples_per_eval: 4
+  scheduler:
+    gamma: 0.5
+    milestones:
+    - 20
+    - 26
+  optimizer:
+    backbone:
+      lr: 0.0004
+      weight_decay: 0.001
+    classifier:
+      lr: 0.0004
+      weight_decay: 0.001
+  tasks:
+    depression:
+      ordinal_loss_target_type: exact28
+      num_classes: 28
+    anxiety:
+      ordinal_loss_target_type: exact22
+      num_classes: 22
+  cpus_per_worker: 4
+data_params:
+  metadata=kirad.datasets_and_dataloaders.KintsugiMetadata:
+    train:
+      df_or_dataset_version: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage1/random/train.csv
+      duration_column: prompt_vad_trimmed_duration
+      audio_root: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage1/random/audio
+    val:
+      df_or_dataset_version: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage1/random/val.csv
+    test:
+      df_or_dataset_version: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage1/random/test.csv
+    val_test:
+      duration_column: prompt_vad_cut_duration
+      audio_root: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage1/random/audio
+    default:
+      label_column:
+        depression: phq
+        anxiety: gad
+      fraction: 1.0
+  audio=kirad.datasets_and_dataloaders.KintsugiAudioDataset:
+    default:
+      preprocessor: openai/whisper-small.en
+      window_method: all
+      normalize_audio: true
+      normalize_features: true
+      ideal_logmel_energies: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/kintsugi-hpc-uniandes/hpc/configs/logmel_energies.npy
+      pad_last_chunk_to_full: true

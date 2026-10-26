@@ -174,3 +174,5 @@ slurm-*.out
 *.ckpt
 logs/
 chkpts/
+# hpc config whose name contains "cache" (upstream ignores *cache*)
+!hpc/configs/dam2_cache.yaml

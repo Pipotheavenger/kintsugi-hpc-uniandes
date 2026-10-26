@@ -350,3 +350,55 @@ relativa se resuelve contra `--experiment-dir` (la carpeta de `research/`), no c
 El perfil refleja el audio de Kintsugi. Para BRIDGE-MH (otro idioma, otros dispositivos, otros países) lo correcto
 sería **recalcularlo con el promedio por banda de nuestros datos reales** (mismo log-mel que usa el código) o, al
 menos, preguntar a Kintsugi cómo lo calcularon. Para las pruebas con datos sintéticos, la constante es suficiente.
+
+## 10. DAM 3, pasos A3 y A4: generador con texto y los cuatro configs (2026-10-26)
+
+### A3. `make_synth_data.py --with-text`
+
+DAM 2 (y por tanto la cadena de DAM 3) lee una transcripción por audio en `<text_root>/<filename>.json`
+(solo el campo `"text"`, `kirad/utils.py:read_whisper_timestamped_json`) y exige la columna `asr_output_id`
+(su valor no se usa). Nuestros audios sintéticos no tienen voz, así que el ASR no sirve: el generador escribe el texto.
+
+- Nueva opción `--with-text`: escribe `<out>/<modo>/text/<split>/<uuid>.json` = `{"text": "..."}` y agrega
+  `asr_output_id` (= `uuid`) a los CSV. Sin la opción, la salida es la misma de antes.
+- Texto en inglés (BERT es `bert-base-uncased`): 32 palabras de relleno + 4 palabras del rango de PHQ
+  (bajo / medio / alto) + 4 del rango de GAD (4 rangos), mezcladas.
+  - `learnable`: los rangos salen de las etiquetas → BERT tiene señal.
+  - `random`: salen de los mismos latentes aleatorios del audio → sin relación con las etiquetas.
+- El chequeo del contrato ahora también verifica que exista cada JSON con texto no vacío y la columna `asr_output_id`.
+- Probado: 8/4/4 en `learnable` y `random`; columnas `uuid,filename,phq,gad,<duración>,asr_output_id`.
+
+### A4. Configs en `hpc/configs/`
+
+Todos apuntan a `~/Kintusgi/Data/kintsugi_synth/dam3_stage1/random/` y a `logmel_energies.npy` con ruta absoluta,
+sin dataset privado (`v2.x`, `data_sources`, `dataset_fold`), con `effective_batch_size` 2, `max_epochs` 3,
+`training_examples_per_eval` 4 y `cpus_per_worker` 4. Modelo, LoRA, pérdidas y optimizador: iguales al original.
+Se validó estáticamente que todas las claves existen en las clases de `kirad` (los modelos usan `extra="forbid"`).
+
+| Config | Base | Cambios propios | Pendiente |
+|---|---|---|---|
+| `dam2.yaml` (B1) | `jun_2024/config.yaml` | `text_dir` eliminado (no es campo válido); `text_root` en la metadata | — |
+| `dam2_cache.yaml` (B2) | `dam2.yaml` | ventanas `all` + `pad_last_chunk_to_full` en todos los splits | `ckpt_path` = `PENDIENTE_URL_DAM2_B1` |
+| `dam3_phase1.yaml` (B3) | `aug_2024/config_llma.yaml` | `audio_dir_or_feature_store_bucket` eliminado (no es campo válido); `audio_root` en la metadata; se mantiene `max_duration: 90` en train | `backbone_cache` = `PENDIENTE_URL_BACKBONE_CACHE_B2` |
+| `dam3_phase2.yaml` (B4) | `aug_2024/config.yaml` | `ckpt_path` sigue `""` como upstream (Whisper de audio preentrenado) | `llma_ckpt` = `PENDIENTE_URL_LLMA_B3` |
+
+Los marcadores `PENDIENTE_...` hacen fallar el job de forma explícita si se lanza antes de llenarlos.
+
+**Decisión importante (B2 ↔ B3).** `broadcast_collate` (`kirad/dataset_utils.py:675-715`) exige que, por cada
+grabación, el número de vectores del caché sea compatible con el número de ventanas de audio. La fase 1 usa ventanas
+`all` + `pad_last_chunk_to_full` (techo de duración/30). Por eso el caché de DAM 2 se genera con esa misma
+configuración de ventanas en los tres splits (en entrenamiento DAM 2 usa `single_random`, que daría 1 vector por audio
+y rompería la fase 1).
+
+**`.gitignore`.** El `.gitignore` original tiene la regla `*cache*`, que ignoraba `dam2_cache.yaml`; se agregó la
+excepción `!hpc/configs/dam2_cache.yaml`.
+
+**Duración de los audios para esta etapa:** exactamente 60 s (`--min-dur 60 --max-dur 60`), para que el relleno de la
+última ventana no genere ventanas casi vacías (con 60.5 s habría una tercera ventana con 0.5 s de audio).
+
+**Comando de datos (Hypatia, desde `~/Kintusgi`):**
+
+```bash
+python kintsugi-hpc-uniandes/hpc/make_synth_data.py --mode random --n-train 8 --n-val 4 --n-test 4 \
+    --min-dur 60 --max-dur 60 --with-text --out-dir Data/kintsugi_synth/dam3_stage1
+```

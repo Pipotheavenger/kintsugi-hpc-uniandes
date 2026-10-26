@@ -16,6 +16,11 @@ Stages of the test plan (always pass a different --out-dir per stage):
   3  --mode learnable --n-train 200 --n-val 40  --n-test 40      (+ control: --mode random, same sizes)
   4  --mode learnable --n-train 500 --n-val 100 --n-test 100
 
+--with-text (needed by DAM 2 and DAM 3, which read transcripts) also writes one JSON per recording at
+<out-dir>/<mode>/text/<split>/<uuid>.json with a "text" field (the only field kirad reads), and adds the
+`asr_output_id` column to the CSVs. Texts are English (bert-base-uncased). In learnable mode the words depend
+on the phq and gad bins (so BERT has signal); in random mode they come from latents unrelated to the labels.
+
 Durations default to 60-61 s: DAM 1 trains with `random_adjacent_pair`, which needs >= 2 windows
 of 30 s. Labels are stratified so every split has samples on both sides of every metric cutoff
 (phq > 9, > 14; gad > 4, > 9, > 14) whenever the split is large enough.
@@ -37,6 +42,16 @@ PHQ_BINS = [(0, 9), (10, 14), (15, 27)]
 GAD_BINS = [(0, 4), (5, 9), (10, 14), (15, 21)]
 EDGE_DURS = (10.0, 20.0, 29.0, 30.0)
 SPLITS = ("train", "val", "test")
+# Words per score bin for --with-text (index = bin index in PHQ_BINS / GAD_BINS).
+PHQ_WORDS = [["rested", "steady", "content", "hopeful", "energetic"],
+             ["tired", "flat", "drained", "unmotivated", "low"],
+             ["hopeless", "empty", "worthless", "exhausted", "numb"]]
+GAD_WORDS = [["relaxed", "calm", "settled", "easy", "secure"],
+             ["uneasy", "restless", "tense", "unsettled", "edgy"],
+             ["nervous", "worried", "jittery", "alarmed", "frazzled"],
+             ["panicked", "terrified", "dreading", "overwhelmed", "frantic"]]
+FILLER = ["today", "i", "have", "been", "feeling", "mostly", "at", "work", "and", "home", "lately",
+          "the", "week", "was", "quite", "with", "my", "family", "friends", "sleep", "this", "morning"]
 # Duration column name per split, as the DAM 1 config reads it (`duration_column`).
 DURATION_COLUMN = {"train": "prompt_vad_trimmed_duration", "val": "prompt_vad_cut_duration",
                    "test": "prompt_vad_cut_duration"}
@@ -80,6 +95,19 @@ def synth_audio(rng, n, phq_latent, gad_latent):
     return audio
 
 
+def score_bin(score, bins):
+    return next(k for k, (lo, hi) in enumerate(bins) if lo <= score <= hi)
+
+
+def synth_text(rng, phq_latent, gad_latent, n_words=40):
+    """English sentence: filler words plus 4 words from the phq bin and 4 from the gad bin of the latents."""
+    words = list(rng.choice(FILLER, size=n_words - 8))
+    words += list(rng.choice(PHQ_WORDS[score_bin(phq_latent, PHQ_BINS)], size=4))
+    words += list(rng.choice(GAD_WORDS[score_bin(gad_latent, GAD_BINS)], size=4))
+    rng.shuffle(words)
+    return " ".join(words)
+
+
 def write_wav(path, audio):
     """16 kHz, mono, int16 PCM."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,7 +119,7 @@ def write_wav(path, audio):
         w.writeframes(pcm.tobytes())
 
 
-def build_split(rng, mode, split, n, min_dur, max_dur, out, extra_durs=()):
+def build_split(rng, mode, split, n, min_dur, max_dur, out, extra_durs=(), with_text=False):
     """Write one split's audio and return its metadata rows."""
     n_total = n + len(extra_durs)
     phq = stratified_scores(rng, n_total, PHQ_BINS)
@@ -111,13 +139,19 @@ def build_split(rng, mode, split, n, min_dur, max_dur, out, extra_durs=()):
         dur = n_samples / SR  # duration column == real length exactly (30 s -> 30.0)
         write_wav(out / "audio" / split / f"{uuid}.wav",
                   synth_audio(rng, n_samples, phq_lat[i], gad_lat[i]))
-        rows.append({
+        row = {
             "uuid": uuid,
-            "filename": f"{split}/{uuid}",  # -> <audio_root>/<filename>.wav
+            "filename": f"{split}/{uuid}",  # -> <audio_root>/<filename>.wav (and <text_root>/<filename>.json)
             "phq": int(phq[i]),
             "gad": int(gad[i]),
             DURATION_COLUMN[split]: dur,  # seconds; name read by `duration_column`
-        })
+        }
+        if with_text:
+            tpath = out / "text" / split / f"{uuid}.json"
+            tpath.parent.mkdir(parents=True, exist_ok=True)
+            tpath.write_text(json.dumps({"text": synth_text(rng, phq_lat[i], gad_lat[i])}))
+            row["asr_output_id"] = uuid  # must exist for text runs; its value is not used
+        rows.append(row)
     return rows
 
 
@@ -130,7 +164,7 @@ def write_csv(path, rows):
         w.writerows(rows)
 
 
-def check_split(split, rows, out, min_dur):
+def check_split(split, rows, out, min_dur, with_text=False):
     """Verify the on-disk contract and report coverage of the metric cutoffs."""
     assert len({r["uuid"] for r in rows}) == len(rows), "duplicate uuid"
     for r in rows:
@@ -138,6 +172,10 @@ def check_split(split, rows, out, min_dur):
             assert w.getframerate() == SR and w.getnchannels() == 1 and w.getsampwidth() == 2
             assert abs(w.getnframes() / SR - r[DURATION_COLUMN[split]]) < 1e-9
         assert 0 <= r["phq"] <= 27 and 0 <= r["gad"] <= 21
+        if with_text:
+            assert "asr_output_id" in r
+            text = json.loads((out / "text" / f"{r['filename']}.json").read_text())["text"]
+            assert isinstance(text, str) and text.strip()
     kept = [r for r in rows if r[DURATION_COLUMN[split]] >= min_dur]
     phq = np.array([r["phq"] for r in rows])
     gad = np.array([r["gad"] for r in rows])
@@ -158,6 +196,8 @@ def main():
     p.add_argument("--edge", action="store_true",
                    help=f"add {EDGE_DURS} s recordings to train to test the duration filter")
     p.add_argument("--out-dir", type=Path, required=True)
+    p.add_argument("--with-text", action="store_true",
+                   help="also write <out>/<mode>/text/<split>/<uuid>.json transcripts + asr_output_id (DAM 2/3)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--overwrite", action="store_true", help="allow writing into a non-empty <out-dir>/<mode>")
     a = p.parse_args()
@@ -175,11 +215,12 @@ def main():
     all_rows = {}
     for split in SPLITS:
         extra = EDGE_DURS if (a.edge and split == "train") else ()
-        all_rows[split] = build_split(rng, a.mode, split, sizes[split], a.min_dur, a.max_dur, out, extra)
+        all_rows[split] = build_split(rng, a.mode, split, sizes[split], a.min_dur, a.max_dur, out, extra,
+                                      with_text=a.with_text)
         write_csv(out / f"{split}.csv", all_rows[split])
 
     print("Contract check (files re-read from disk):")
-    kept = {s: check_split(s, all_rows[s], out, MIN_DURATION_FILTER) for s in SPLITS}
+    kept = {s: check_split(s, all_rows[s], out, MIN_DURATION_FILTER, a.with_text) for s in SPLITS}
 
     try:
         commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True,
@@ -195,6 +236,8 @@ Config (per split section of data_params -> metadata=...KintsugiMetadata; drop m
   train:    df_or_dataset_version: {out}/train.csv   audio_root: {out}/audio   duration_column: prompt_vad_trimmed_duration
   val_test: df_or_dataset_version: {out}/<val|test>.csv   audio_root: {out}/audio   duration_column: prompt_vad_cut_duration
 Expected rows in train after filter_metadata: {kept['train']}""")
+    if a.with_text:
+        print(f"  text_root: {out}/text   (transcripts: <text_root>/<filename>.json, field 'text')")
 
 
 if __name__ == "__main__":
