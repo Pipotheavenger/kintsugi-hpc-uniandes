@@ -1,0 +1,70 @@
+# STAGE 3 (learnable, 200/40/40, 60 s, with text). Copy of hpc/configs/dam3_phase1.yaml with data paths, experiment
+# name and training params changed (effective_batch_size 4, training_examples_per_eval 100, max_epochs 8).
+# DAM 3 chain, step B3: phase 1 (WhisperLLMA). Based on research/stable/ordinal_regression_mtl_aug_2024/config_llma.yaml.
+#   - backbone_cache: W&B URL of the cache from step B2 (backbone_cache-<run>/v0). PENDING until B2 runs.
+#   - audio_dir_or_feature_store_bucket (not a valid field) removed; audio_root lives in the metadata.
+#   - ideal_logmel_energies absolute path; small batches/epochs; train max_duration 90 kept from original.
+# Run:  sbatch hpc/run_job.sbatch scripts/launcher.py train hpc/configs/dam3_stage3_learnable/dam3_phase1.yaml --experiment-dir research/stable/ordinal_regression_mtl_aug_2024
+# Output: W&B artifact model-<run> (best) -> llma_ckpt in dam3_phase2.yaml.
+---
+experiment_name: dam3_stage3_learnable_B3_phase1_llma
+description: 'DAM 3 chain, step B3: WhisperLLMA (full Whisper fine-tune, MSE to cached BERT half) on synthetic learnable data, 200/40/40'
+model_params:
+  model_path: model.WhisperLLMA
+  ckpt_path: ''
+  restore_training_state: false
+  config:
+    whisper_config:
+      model: openai/whisper-small.en
+      hf_config:
+        encoder_layerdrop: 0.0
+        dropout: 0.0
+        activation_dropout: 0.0
+training_params:
+  seed: 42
+  batch_size: 1
+  effective_batch_size: 4
+  max_epochs: 8
+  early_stopping_patience: 10
+  monitor_loss: min:metrics/val/total_loss
+  scheduler:
+    gamma: 0.5
+    milestones:
+    - 14
+  optimizer:
+    backbone:
+      lr: 4.0e-05
+      weight_decay: 0.001
+  training_examples_per_eval: 100
+  cpus_per_worker: 4
+data_params:
+  metadata=kirad.datasets_and_dataloaders.KintsugiMetadata:
+    train:
+      df_or_dataset_version: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage3_learnable/learnable/train.csv
+      duration_column: prompt_vad_trimmed_duration
+      audio_root: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage3_learnable/learnable/audio
+      max_duration: 90
+    val:
+      df_or_dataset_version: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage3_learnable/learnable/val.csv
+    test:
+      df_or_dataset_version: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage3_learnable/learnable/test.csv
+    val_test:
+      duration_column: prompt_vad_cut_duration
+      audio_root: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage3_learnable/learnable/audio
+    default:
+      label_column:
+        depression: phq
+        anxiety: gad
+      fraction: 1.0
+  audio=kirad.datasets_and_dataloaders.KintsugiAudioDataset:
+    default:
+      preprocessor: openai/whisper-small.en
+      window_method: all
+      normalize_audio: true
+      normalize_features: true
+      ideal_logmel_energies: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/kintsugi-hpc-uniandes/hpc/configs/logmel_energies.npy
+      pad_last_chunk_to_full: true
+  backbone_cache=kirad.datasets_and_dataloaders.KintsugiCacheDataset:
+    default:
+      backbone_cache: PENDIENTE_URL_BACKBONE_CACHE_B2
+      feat_start_idx: 768

@@ -1,0 +1,113 @@
+# STAGE 3 (random, 200/40/40, 60 s, with text). Copy of hpc/configs/dam2_cache.yaml with data paths, experiment
+# name and training params changed (effective_batch_size 4, training_examples_per_eval 100, max_epochs 8).
+# DAM 3 chain, step B2: cache DAM 2 outputs. Same as dam2.yaml except:
+#   - ckpt_path: W&B URL of the DAM 2 model from step B1 (model-<run>/best). PENDING until B1 runs.
+#   - audio windows: "all" + pad_last_chunk_to_full in every split, exactly like dam3_phase1.yaml, so each uuid
+#     has the same number of cached vectors as audio windows in phase 1 (broadcast_collate requires it).
+# Run:  sbatch hpc/run_job.sbatch scripts/launcher.py cache hpc/configs/dam3_stage3_random/dam2_cache.yaml --experiment-dir research/stable/ordinal_regression_mtl_jun_2024
+# Output: W&B artifact backbone_cache-<run> (tag v0) -> goes into dam3_phase1.yaml.
+---
+experiment_name: dam3_stage3_random_B2_dam2_cache
+description: 'DAM 3 chain, step B2: cache DAM 2 backbone outputs (audio 768 + BERT 768) for every uuid'
+model_params:
+  model_path: model.DepAnxClassifierWhisperBERT
+  ckpt_path: PENDIENTE_URL_DAM2_B1
+  restore_training_state: false
+  config:
+    whisper_config:
+      model: openai/whisper-small.en
+      hf_config:
+        encoder_layerdrop: 0.0
+        dropout: 0.0
+        activation_dropout: 0.0
+      lora_params:
+        r: 32
+        lora_alpha: 64.0
+        target_modules: all-linear
+        lora_dropout: 0.4
+        modules_to_save:
+        - conv1
+        - conv2
+        bias: all
+    bert_config:
+      model: google-bert/bert-base-uncased
+      hf_config:
+        attention_probs_dropout_prob: 0.0
+        classifier_dropout: 0.0
+        hidden_dropout_prob: 0.0
+      lora_params:
+        r: 32
+        lora_alpha: 64.0
+        target_modules: all-linear
+        lora_dropout: 0.4
+        bias: all
+    classifier_config:
+      shared_projection_dim:
+      - 256
+      - 64
+      tasks:
+        depression:
+          proj_dim: 128
+          dropout: 0.4
+        anxiety:
+          proj_dim: 128
+          dropout: 0.4
+training_params:
+  seed: 44
+  batch_size: 2
+  effective_batch_size: 4
+  max_epochs: 8
+  early_stopping_patience: 10
+  monitor_loss: max:metrics/val/sn_eq_sp@0%i
+  scheduler:
+    gamma: 0.5
+    milestones:
+    - 20
+    - 26
+  optimizer:
+    backbone:
+      lr: 0.00016
+      weight_decay: 0.001
+    classifier:
+      lr: 0.0008
+      weight_decay: 0.001
+  tasks:
+    depression:
+      ordinal_loss_target_type: exact28
+      num_classes: 28
+    anxiety:
+      ordinal_loss_target_type: exact22
+      num_classes: 22
+  training_examples_per_eval: 100
+  cpus_per_worker: 4
+data_params:
+  metadata=kirad.datasets_and_dataloaders.KintsugiMetadata:
+    train:
+      df_or_dataset_version: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage3_random/random/train.csv
+      duration_column: prompt_vad_trimmed_duration
+      audio_root: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage3_random/random/audio
+      text_root: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage3_random/random/text
+    val:
+      df_or_dataset_version: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage3_random/random/val.csv
+    test:
+      df_or_dataset_version: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage3_random/random/test.csv
+    val_test:
+      duration_column: prompt_vad_cut_duration
+      audio_root: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage3_random/random/audio
+      text_root: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/kintsugi_synth/dam3_stage3_random/random/text
+    default:
+      label_column:
+        depression: phq
+        anxiety: gad
+      fraction: 1.0
+  audio=kirad.datasets_and_dataloaders.KintsugiAudioDataset:
+    default:
+      preprocessor: openai/whisper-small.en
+      normalize_audio: true
+      normalize_features: true
+      ideal_logmel_energies: /hpcfs/home/ing_quimica/sf.valencia/Kintusgi/kintsugi-hpc-uniandes/hpc/configs/logmel_energies.npy
+      window_method: all
+      pad_last_chunk_to_full: true
+  text=kirad.datasets_and_dataloaders.KintsugiTextDataset:
+    default:
+      preprocessor: google-bert/bert-base-uncased

@@ -515,3 +515,40 @@ en `.gitignore` para `dam2_cache.yaml`.
 
 **Siguiente:** prueba con señal (~280 audios `learnable` con texto) y control (`random`, mismo tamaño), para ver si
 la cadena aprende y para medir el costo real por paso.
+
+## 15. DAM 3, etapa 3: prueba con señal (`learnable`) y control (`random`) — preparación (2026-10-26)
+
+**Objetivo.** Ver si la cadena de DAM 3 aprende cuando hay relación entre audio/texto y etiqueta, y que no "aprenda"
+cuando no la hay (control contra fugas). De paso, medir el costo con más datos que en la etapa 1.
+
+**Datos.** 200 / 40 / 40 audios de 60 s exactos, con texto, en dos carpetas separadas:
+
+```bash
+# Hypatia, en un nodo de cómputo (son ~280 audios y ~0.5 GB por conjunto)
+srun --mem=8G --time=00:30:00 --pty bash
+conda activate kintsugi && cd ~/Kintusgi
+python kintsugi-hpc-uniandes/hpc/make_synth_data.py --mode learnable --n-train 200 --n-val 40 --n-test 40 \
+    --min-dur 60 --max-dur 60 --with-text --out-dir Data/kintsugi_synth/dam3_stage3_learnable
+python kintsugi-hpc-uniandes/hpc/make_synth_data.py --mode random --n-train 200 --n-val 40 --n-test 40 \
+    --min-dur 60 --max-dur 60 --with-text --out-dir Data/kintsugi_synth/dam3_stage3_random
+exit
+```
+
+En `learnable`, la etiqueta está en el audio (tono ↔ PHQ, banda de ruido ↔ GAD) y en el texto (palabras por rango);
+en `random`, ni el audio ni el texto tienen relación con la etiqueta.
+
+**Configs.** `hpc/configs/dam3_stage3_learnable/` y `hpc/configs/dam3_stage3_random/`, cada una con los cuatro
+configs de la cadena. Son copias de los de la etapa 1 con: rutas de datos de su conjunto; `experiment_name` propio
+(`dam3_stage3_<modo>_B1_dam2`, …), así cada corrida tiene su carpeta de checkpoints; parámetros de la etapa 3 del
+plan: `effective_batch_size` 4, `training_examples_per_eval` 100 (2 validaciones por época), `max_epochs` 8; y las
+URLs de W&B reiniciadas a `PENDIENTE_...` (no deben heredarse de la etapa 1).
+
+**`.gitignore`.** La excepción pasa a `!hpc/configs/**/dam2_cache.yaml` para cubrir las subcarpetas.
+
+**Criterio de éxito.**
+
+| | `learnable` | `random` (control) |
+|---|---|---|
+| B1 DAM 2 | pérdida baja en train y val; AUROC de test claramente > 0.5 | val no mejora; AUROC ~0.5 |
+| B3 fase 1 | MSE de val baja | MSE baja (imita a BERT igual), pero sin información de la etiqueta |
+| B4 fase 2 | val mejora; AUROC de test claramente > 0.5 | val no mejora; AUROC ~0.5 (si mejora: fuga) |
