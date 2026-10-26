@@ -66,5 +66,5 @@ data_params:
       pad_last_chunk_to_full: true
   backbone_cache=kirad.datasets_and_dataloaders.KintsugiCacheDataset:
     default:
-      backbone_cache: PENDIENTE_URL_BACKBONE_CACHE_B2
+      backbone_cache: https://forge.coreweave.com/sebastian-valencia-world-bank-/kintsugi-hpc-uniandes/artifacts/backbone_cache/backbone_cache-idiokrs1/v0
       feat_start_idx: 768

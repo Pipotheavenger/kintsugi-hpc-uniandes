@@ -583,3 +583,14 @@ PHQ/GAD, y el audio un tono y una banda que dependen del puntaje). Un AUROC ~1 a
 de cómo le irá con voz real. Tampoco sabemos todavía qué rama (audio o texto) aportó la señal.
 
 **Costo:** con 200 audios × 8 épocas, ~6–7 min por corrida (vs 3.4 min con 16 audios × 3 épocas).
+
+### 15.2 Resultado B2 (caché), etapa 3
+
+| | `learnable` (job 784467, run `f3brbzbb`) | `random` (job 784468, run `idiokrs1`) |
+|---|---|---|
+| Estado | COMPLETED 0:0 | COMPLETED 0:0 |
+| Tiempo / RAM | 1 min 47 s / ~11.6 GB | 2 min 25 s / ~11.7 GB |
+| `Global cache size` | 280 | 280 |
+
+URLs puestas en los `dam3_phase1.yaml` de cada carpeta: `backbone_cache-f3brbzbb/v0` (learnable) y
+`backbone_cache-idiokrs1/v0` (random).
