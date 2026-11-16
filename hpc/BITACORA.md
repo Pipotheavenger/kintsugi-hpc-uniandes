@@ -689,3 +689,8 @@ columnas de sus listas `common_cols` / `list_cols` / `sum_cols`, y no incluye `a
 `load_relative_dataset` crea a partir de `filename` + `audio_root`. Al fusionar las filas de cada persona se pierden
 las rutas de audio. Arreglo (2 líneas): agregar `audio_filename` y `text_filename` a `list_cols`. Probado con
 `train.csv`: 4.415 filas → 3.108 personas, cada una con la lista de sus WAV y la duración sumada.
+
+### 16.4 Segunda corrida: Whisper multilingüe
+`hpc/configs/dam1_bridge_multilingual.yaml` = `dam1_bridge.yaml` cambiando solo el backbone de `openai/whisper-small.en`
+(inglés) a `openai/whisper-small` (multilingüe; mismo tamaño, mismas 80 bandas log-mel) y el `experiment_name`.
+Mismos datos, split, hiperparámetros y semilla, para comparar directamente con la corrida en inglés (job 803180).
