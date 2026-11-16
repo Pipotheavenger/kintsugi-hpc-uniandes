@@ -694,3 +694,21 @@ las rutas de audio. Arreglo (2 líneas): agregar `audio_filename` y `text_filena
 `hpc/configs/dam1_bridge_multilingual.yaml` = `dam1_bridge.yaml` cambiando solo el backbone de `openai/whisper-small.en`
 (inglés) a `openai/whisper-small` (multilingüe; mismo tamaño, mismas 80 bandas log-mel) y el `experiment_name`.
 Mismos datos, split, hiperparámetros y semilla, para comparar directamente con la corrida en inglés (job 803180).
+
+### 16.5 Resultados (test: 941 grabaciones de 666 personas)
+Ambos jobs `COMPLETED` (exit 0:0), sin errores; los dos se detuvieron por early stopping antes de 32 épocas.
+
+| métrica (test) | 803180 `whisper-small.en` (W&B `pnybari4`) | 803200 `whisper-small` multilingüe (W&B `bnkqcsas`) |
+|---|---|---|
+| tiempo | 2:51:12 | 2:07:00 |
+| AUROC@0%i global | **0.666** | 0.655 |
+| AUROC depresión | 0.656 | 0.646 |
+| AUROC ansiedad | 0.675 | 0.664 |
+| AUROC@40%i global | 0.734 | 0.716 |
+| sn_eq_sp@0%i global | 0.607 | 0.604 |
+| sn_eq_sp@0%i depresión / ansiedad | 0.607 / 0.608 | 0.600 / 0.608 |
+| total_loss | 21.54 | 23.34 |
+
+Lectura: hay señal por encima del azar (AUROC ~0.66) con split aleatorio por persona. La diferencia entre inglés y
+multilingüe (~0.01 de AUROC) está dentro del ruido esperable con ~940 grabaciones de test. Pendiente: evaluación con
+encuestadores fuera (efecto encuestador) para saber cuánto de esta señal es voz y cuánto es encuestador/dispositivo.
