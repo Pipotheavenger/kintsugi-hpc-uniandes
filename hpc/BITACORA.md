@@ -680,3 +680,12 @@ rutas a los CSV/audio en Hypatia, `merge_rows_by_subject: many_to_one` en train 
 
 Notas: el backbone es `whisper-small.en` (inglés) y el habla es en lenguas locales/swahili/francés (idioma no
 registrado); el perfil log-mel es el de Kintsugi. Es una primera corrida de referencia.
+
+### 16.3 Primer intento (job 803172): falla en train por `merge_rows_by_subject`
+Arrancó bien (W&B run `3p9rb800`; filtró por < 30 s: 1 de 3.108 en train, 1 de 945 en val, 4 de 945 en test) y falló
+al empezar la primera época: `AttributeError: 'Series' object has no attribute 'audio_filename'`.
+Causa: `kirad.dataset_utils.merge_df_rows_by_subject` (lo usa `merge_rows_by_subject: many_to_one`) solo conserva las
+columnas de sus listas `common_cols` / `list_cols` / `sum_cols`, y no incluye `audio_filename` ni `text_filename`, que
+`load_relative_dataset` crea a partir de `filename` + `audio_root`. Al fusionar las filas de cada persona se pierden
+las rutas de audio. Arreglo (2 líneas): agregar `audio_filename` y `text_filename` a `list_cols`. Probado con
+`train.csv`: 4.415 filas → 3.108 personas, cada una con la lista de sus WAV y la duración sumada.

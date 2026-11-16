@@ -622,6 +622,8 @@ def merge_df_rows_by_subject(df):
     list_cols = [
         "uuid",
         "filename",
+        "audio_filename",  # added (hpc): set by load_relative_dataset; without it merged rows lose their audio paths
+        "text_filename",
         "orig_audio_name",
         "prompt",
         "asr_output_id",
