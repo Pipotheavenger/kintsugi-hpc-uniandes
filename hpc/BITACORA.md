@@ -712,3 +712,18 @@ Ambos jobs `COMPLETED` (exit 0:0), sin errores; los dos se detuvieron por early 
 Lectura: hay señal por encima del azar (AUROC ~0.66) con split aleatorio por persona. La diferencia entre inglés y
 multilingüe (~0.01 de AUROC) está dentro del ruido esperable con ~940 grabaciones de test. Pendiente: evaluación con
 encuestadores fuera (efecto encuestador) para saber cuánto de esta señal es voz y cuánto es encuestador/dispositivo.
+
+### 16.6 Historial de entrenamiento (W&B)
+Descargado en Hypatia con `python hpc/wandb_history.py pnybari4 bnkqcsas --out ~/Kintusgi/results`
+(`wandb.Api().run(...)`; guarda `<run>_val.csv` y `<run>_train.csv`). ~98 pasos de optimizador por época, una validación por época.
+
+| | small.en (`pnybari4`) | small multilingüe (`bnkqcsas`) |
+|---|---|---|
+| validaciones (épocas) | 23 | 17 |
+| mejor checkpoint (máx. val sn_eq_sp@0%i) | validación 13 (paso 1274), 0.660 | validación 7 (paso 686), 0.654 |
+| val AUROC en el mejor: global / dep / anx | 0.709 / 0.706 / 0.711 | 0.701 / 0.703 / 0.698 |
+| test AUROC: global / dep / anx | 0.666 / 0.656 / 0.675 | 0.655 / 0.646 / 0.664 |
+
+La AUROC de validación sube a ~0.68 en 3 épocas y luego se estanca (0.66–0.71). La pérdida de train baja de forma
+continua (28.5 → 17.2) mientras la de validación se aplana desde ~la época 13 (inicio de sobreajuste). La caída
+validación → test (~0.04) es la esperable al elegir el máximo de una métrica ruidosa.
