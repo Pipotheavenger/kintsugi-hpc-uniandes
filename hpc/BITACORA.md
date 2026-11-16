@@ -646,3 +646,37 @@ sea con una pendiente débil aprendida en train (-0.03), ordena bien el test. Po
 en ningún paso), es un control mal sorteado. Hay que repetir el control con otra semilla verificada (correlación
 cercana a 0 en todos los splits) antes de dar el resultado por bueno. Lección: el generador debería reportar esta
 correlación.
+
+## 16. DAM 1 con datos reales: baseline BRIDGE-MH (Bukavu), todas las versiones (2026-11-16)
+
+Decisión (Sebas): usar **todas** las versiones del cuestionario (v1, v2, v4, v5, v6; la v3 está vacía) y un split
+**aleatorio por persona** 70/15/15, estratificado por versión y PHQ > 9 (semilla 0). Las dos grabaciones de una persona
+quedan siempre en el mismo split.
+
+### 16.1 Datos (en el Mac, `KitsugiCode/Bridge_baseline/`)
+- `data/raw/`: `Baseline 2.dta` + zips del portal (Binary = audio m4a; Tabular/STATA = respuestas). No se tocan.
+- `data/clean/baseline_clean.{parquet,pkl}`: el `.dta` + `phq` (suma de 9 ítems, 0–27), `gad` (suma de 7, 0–21) e
+  `in_analysis` (consentimiento de voz + al menos un audio + PHQ/GAD completos) → 4.440 personas.
+- `hpc/bridge_prepare.py audio`: convierte los 6.305 audios de esas personas a WAV 16 kHz mono 16-bit (ffmpeg) en
+  `data/clean/dam1/audio/<interview__key>/<AudioN__|AudioN_f__>.wav` (13 GB).
+- `hpc/bridge_prepare.py csv`: escribe `train/val/test.csv` con `uuid` (por grabación), `filename`, `user`
+  (= `interview__key`), `phq`, `gad`, `version` y la duración medida (`prompt_vad_trimmed_duration` en train,
+  `prompt_vad_cut_duration` en val/test). Sin nombres ni teléfonos.
+
+| split | personas | grabaciones | < 30 s | PHQ > 9 | GAD > 9 |
+|---|---|---|---|---|---|
+| train | 3.108 | 4.415 | 5 | 30.3 % | 25.1 % |
+| val | 666 | 945 | 1 | 30.5 % | 25.7 % |
+| test | 666 | 945 | 4 | 30.2 % | 24.9 % |
+
+Audios < 30 s: 10 archivos de 8 personas; solo 3 personas quedan sin ningún audio ≥ 30 s (train PHQ 2; test PHQ 0 y 9).
+En train no se pierden: `merge_rows_by_subject` suma la duración de las grabaciones de cada persona.
+
+### 16.2 Config `hpc/configs/dam1_bridge.yaml`
+Copia de `ordinal_regression_mtl_mar_2024/config.yaml` (modelo, LoRA, pérdidas y optimizador sin cambios). Cambios:
+rutas a los CSV/audio en Hypatia, `merge_rows_by_subject: many_to_one` en train (como upstream), `effective_batch_size`
+32 (upstream 128; ~97 pasos por época), `training_examples_per_eval` 3108 (una validación por época), `max_epochs` 32 y
+`early_stopping_patience` 10 (upstream).
+
+Notas: el backbone es `whisper-small.en` (inglés) y el habla es en lenguas locales/swahili/francés (idioma no
+registrado); el perfil log-mel es el de Kintsugi. Es una primera corrida de referencia.
