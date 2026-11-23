@@ -689,6 +689,10 @@ def get_package_info(package: Literal["kipy", "kirad"]) -> Mapping[str, str]:
             f'Package path "{package_path}" for package "{package}" is not a valid '
             "git repo. Will not log git info for this package."
         )
+    except Exception as e:  # added (hpc): no git executable on the node (e.g. Hypatia gpu_economia)
+        commit_hash = os.environ.get("KIRAD_GIT_COMMIT", "unknown (git not available)")
+        is_dirty = None
+        logger.warning(f"Could not read git info for {package} ({e!r}); using commit {commit_hash}.")
 
     return {
         "package": package,

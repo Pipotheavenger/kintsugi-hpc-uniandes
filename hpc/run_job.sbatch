@@ -29,5 +29,15 @@ conda activate "${ENV_NAME:-kintsugi}"
 set -u
 
 cd "$REPO_DIR"
-echo "Running commit: $(git rev-parse --short HEAD)"   # reproducibility: log what ran
+# Some nodes (gpu_economia: nodea-gpu-3) have no git executable: read the commit from .git directly and let
+# GitPython import without it (kirad.utils.get_package_info then logs KIRAD_GIT_COMMIT).
+if command -v git >/dev/null 2>&1; then
+    KIRAD_GIT_COMMIT=$(git rev-parse HEAD)
+else
+    export GIT_PYTHON_REFRESH=quiet
+    HEAD_REF=$(sed 's/^ref: //' .git/HEAD)
+    KIRAD_GIT_COMMIT=$(cat ".git/$HEAD_REF" 2>/dev/null || grep " $HEAD_REF\$" .git/packed-refs | cut -d' ' -f1)
+fi
+export KIRAD_GIT_COMMIT
+echo "Running commit: ${KIRAD_GIT_COMMIT:0:7}"   # reproducibility: log what ran
 python "$@"

@@ -792,3 +792,52 @@ tercer job queda en cola hasta que se libere una.
   test y por grupo (sexo, edad, lengua materna, desplazado, educación, orden de las preguntas): FP, FN, tasas de
   falsos positivos/negativos y la correlación de Spearman entre el score y el PHQ/GAD real. También escribe la base
   limpia + scores (`<run>_baseline_with_scores.pkl/.csv`) para Ignacio: solo personas de val/test tienen score.
+
+### 17.3 Lanzamiento y primeros fallos (2026-11-23)
+**Partición `gpu_economia`.** Sebas tiene acceso (grupo `gpu_economia`). Nodo `nodea-gpu-3`: 2 × NVIDIA **L40, 46 GB**
+(driver 575), 64 CPUs, ~1 TB RAM. El nodo está bajo la reserva `root_30` (grupo `gpu_economia`, hasta
+2026-11-25 14:48), así que los jobs se envían con `-p gpu_economia --reservation=root_30`. El límite por usuario
+(QoS `gpu`) es el mismo en ambas particiones: **2 GPUs, 32 CPUs, ~187 GB** en total; el tercer job queda en cola
+(`QOSMaxGRESPerUser`). Los large-v2 van a `gpu_economia` (más memoria y más rápida); small.en a `gpu`.
+
+Primer envío (jobs 810585 E, 810586 D, 810587 C) → los tres FAILED:
+- **E y C (gpu_economia):** `ImportError: Failed to initialize: Bad git executable`. El nodo `nodea-gpu-3` no tiene
+  `git` (ni módulo). `kirad/utils.py` importa GitPython y `get_package_info` lee el commit con él.
+  Arreglo: en `hpc/run_job.sbatch`, si no hay `git`, se exporta `GIT_PYTHON_REFRESH=quiet` y el commit se lee de
+  `.git/HEAD` + la ref (sin ejecutable) en `KIRAD_GIT_COMMIT`; en `kirad/utils.py` (`get_package_info`) se añadió un
+  `except Exception` que usa `KIRAD_GIT_COMMIT` en vez de fallar. No se instaló nada en el entorno conda.
+- **D (gpu):** `ValueError: Invalid training_examples_per_eval: 1275 is not divisible by global_batch_size = 2`.
+  Arreglo: 1276 en `dam1_bridge_v6.yaml` y `dam1_bridge_v6_large.yaml`.
+
+### 17.4 Métricas nuevas de A y B (todas las versiones, small.en y multilingüe)
+`python hpc/bridge_eval.py pnybari4 bnkqcsas` (resultados en `~/Kintusgi/results/<run>_{scores,confusion}.csv`).
+Primer intento falló: tomaba el índice de la fila del historial de W&B (`v4072`) en vez del índice de la validación;
+corregido (commit 917a8e8) contando solo las filas con métrica de validación y verificando que coincida con el
+número de artifacts de scores de validación. La tabla de validación usada es la del mejor checkpoint: `v12` (A,
+validación 13 de 23) y `v6` (B, validación 7 de 17). Sesgos CORAL leídos de `chkpts/<experiment_name>/epoch-*.ckpt`.
+
+Control: el promedio por corte de sensibilidad/especificidad coincide con `sn_at_val_eq_thresh` /
+`sp_at_val_eq_thresh` que reporta kirad (A depresión: (0.635 + 0.579)/2 = 0.607).
+
+Test por grabación (941), umbral de validación sn = sp:
+
+| exp | tarea | corte | positivos | TP | FP | FN | TN | sens. (recall) | espec. | precisión | NPV | F1 | accuracy |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| A small.en | dep | >9 | 266 | 169 | 271 | 97 | 404 | 0.635 | 0.599 | 0.384 | 0.806 | 0.479 | 0.609 |
+| A | dep | >14 | 107 | 62 | 320 | 45 | 514 | 0.579 | 0.616 | 0.162 | 0.919 | 0.254 | 0.612 |
+| A | anx | >4 | 496 | 326 | 167 | 170 | 278 | 0.657 | 0.625 | 0.661 | 0.621 | 0.659 | 0.642 |
+| A | anx | >9 | 219 | 134 | 297 | 85 | 425 | 0.612 | 0.589 | 0.311 | 0.833 | 0.412 | 0.594 |
+| A | anx | >14 | 46 | 24 | 272 | 22 | 623 | 0.522 | 0.696 | 0.081 | 0.966 | 0.140 | 0.688 |
+| B multilingüe | dep | >9 | 266 | 155 | 250 | 111 | 425 | 0.583 | 0.630 | 0.383 | 0.793 | 0.462 | 0.616 |
+| B | dep | >14 | 107 | 62 | 287 | 45 | 547 | 0.579 | 0.656 | 0.178 | 0.924 | 0.272 | 0.647 |
+| B | anx | >4 | 496 | 294 | 169 | 202 | 276 | 0.593 | 0.620 | 0.635 | 0.577 | 0.613 | 0.606 |
+| B | anx | >9 | 219 | 118 | 275 | 101 | 447 | 0.539 | 0.619 | 0.300 | 0.816 | 0.386 | 0.600 |
+| B | anx | >14 | 46 | 29 | 283 | 17 | 612 | 0.630 | 0.684 | 0.093 | 0.973 | 0.162 | 0.681 |
+
+Test por persona (A, 664 personas; score = promedio de sus grabaciones): dep >9 sens 0.632 / espec 0.605 /
+precisión 0.410 / F1 0.497; dep >14 0.605 / 0.602 / 0.184 / 0.283; anx >4 0.639 / 0.635 / 0.685 / 0.661;
+anx >9 0.618 / 0.577 / 0.326 / 0.427; anx >14 0.583 / 0.699 / 0.100 / 0.171.
+
+Lectura: con ~60 % de sensibilidad y especificidad, la **precisión** cae cuando el corte es raro (dep >14: 16 %;
+anx >14: 8 %): la mayoría de los positivos predichos son falsos positivos. El **NPV** es alto (0.81–0.97) porque la
+mayoría de la gente está por debajo del corte. Es la consecuencia esperable del desbalance que señaló Ignacio.

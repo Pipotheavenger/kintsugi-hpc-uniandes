@@ -40,7 +40,7 @@ training_params:
   effective_batch_size: 32      # upstream 128; v6 train has 1,275 people -> ~40 optimizer steps per epoch
   max_epochs: 32                # upstream
   early_stopping_patience: 10   # upstream (counted in validations)
-  training_examples_per_eval: 1275   # one validation per epoch (v6 train: 1,275 people; upstream 16000)
+  training_examples_per_eval: 1276   # ~one validation per epoch (v6 train: 1,275 people; must be divisible by batch_size 2)
   cpus_per_worker: 4            # sbatch asks for 8 CPUs
   monitor_loss: "max:metrics/val/sn_eq_sp@0%i"
   scheduler:
