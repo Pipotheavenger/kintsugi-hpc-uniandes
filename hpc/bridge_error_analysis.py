@@ -83,7 +83,7 @@ for task, cuts in MAIN.items():
                 m = (g == val).to_numpy()
                 yy, pp = y[m], pred[m]
                 tp, fp, fn, tn = int((pp & yy).sum()), int((pp & ~yy).sum()), int((~pp & yy).sum()), int((~pp & ~yy).sum())
-                sp_corr = pd.Series(t.score.to_numpy()[m]).corr(pd.Series(t.label.to_numpy()[m]), method="spearman")
+                sp_corr = pd.Series(t.score.to_numpy()[m]).rank().corr(pd.Series(t.label.to_numpy()[m]).rank())  # Spearman without scipy
                 rows.append(dict(task=task, cutoff=f">{c}", group=gname, value=val, people=int(m.sum()),
                                  spearman_score_vs_true=sp_corr,
                                  positives=tp + fn, TP=tp, FP=fp, FN=fn, TN=tn,

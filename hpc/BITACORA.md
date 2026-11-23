@@ -841,3 +841,63 @@ anx >9 0.618 / 0.577 / 0.326 / 0.427; anx >14 0.583 / 0.699 / 0.100 / 0.171.
 Lectura: con ~60 % de sensibilidad y especificidad, la **precisión** cae cuando el corte es raro (dep >14: 16 %;
 anx >14: 8 %): la mayoría de los positivos predichos son falsos positivos. El **NPV** es alto (0.81–0.97) porque la
 mayoría de la gente está por debajo del corte. Es la consecuencia esperable del desbalance que señaló Ignacio.
+
+### 17.5 Segundo envío (2026-11-23): memoria del host en large-v2
+Jobs 810595 (E, v6 large-v2, W&B `sefd1s0f`) y 810596 (C, todas large-v2, `hndj4w4v`) arrancaron bien en las L40
+(GPU ~95 %, ~18 GB de 46 GB) y 810597 (D, v6 small.en) quedó en cola.
+- **E falló a los 8 min** al guardar el primer checkpoint: `RuntimeError: ... inline_container.cc ... unexpected pos`
+  seguido de `DefaultCPUAllocator: can't allocate memory`. El job pedía 32 GB de RAM (default de `run_job.sbatch`);
+  el proceso ya usaba ~22 GB y la serialización del checkpoint de large-v2 superó el límite del cgroup.
+- C usaba ~22 GB y habría fallado igual en su primer checkpoint: se canceló (`scancel 810596`, 9 min).
+- Relanzados con `--mem=72G` (límite QoS por usuario: ~187 GB en total; 72 + 72 + 32 de D cabe):
+  **810610 (E)** corriendo en `nodea-gpu-3`; **810611 (C)** en cola hasta que D termine; **810597 (D)** corriendo
+  en `nodei-gpu-1` (gpu, 32 GB basta para small).
+
+### 17.6 Análisis de errores por grupo demográfico (A y B, todas las versiones)
+Scores y matrices copiados de Hypatia al Mac (`scp`) a `Bridge_baseline/data/clean/results/` y analizados en el Mac
+con `python hpc/bridge_error_analysis.py --base Bridge_baseline --results Bridge_baseline/data/clean/results
+--run <run>` (la base de la encuesta no sale del Mac). Cambio: la correlación de Spearman se calcula con rangos +
+Pearson porque el entorno del Mac no tiene scipy. Nivel persona, test (664 personas), umbral de validación sn = sp.
+
+Salidas (no van al repo, tienen datos de la encuesta): `<run>_errors_by_group.csv` y
+`<run>_baseline_with_scores.{pkl,csv}` = base limpia (4.488 filas) + `depression_score`, `anxiety_score`
+(promedio por persona del score CORAL), `*_split` (val/test) y `*_pred_gt<c>` (0/1 con el umbral de validación).
+Solo 1.330 personas (val + test) tienen score; las de train no (el modelo las vio).
+
+Depresión, PHQ > 9, A (small.en) — entre paréntesis B (multilingüe):
+
+| grupo | personas | positivos | Spearman score~PHQ | sensibilidad | especificidad | precisión |
+|---|---|---|---|---|---|---|
+| mujeres | 580 | 174 | 0.36 (0.30) | 0.66 (0.63) | 0.61 (0.62) | 0.42 (0.41) |
+| hombres | 84 | 27 | 0.09 (0.05) | 0.48 (0.26) | 0.58 (0.74) | 0.35 (0.32) |
+| 18–24 años | 197 | 45 | 0.26 (0.16) | 0.38 (0.36) | 0.74 (0.76) | 0.30 (0.30) |
+| 25–34 | 235 | 68 | 0.26 (0.19) | 0.59 (0.47) | 0.61 (0.68) | 0.38 (0.37) |
+| 35–44 | 105 | 39 | 0.50 (0.41) | 0.87 (0.87) | 0.52 (0.47) | 0.52 (0.49) |
+| 45+ | 119 | 44 | 0.16 (0.16) | 0.75 (0.73) | 0.39 (0.41) | 0.42 (0.42) |
+| educación superior | 131 | 37 | 0.23 (0.20) | 0.46 (0.41) | 0.74 (0.83) | 0.41 (0.48) |
+| secundaria | 381 | 107 | 0.28 (0.20) | 0.56 (0.50) | 0.61 (0.64) | 0.36 (0.36) |
+| primaria | 103 | 35 | 0.33 (0.31) | 0.86 (0.83) | 0.46 (0.40) | 0.45 (0.41) |
+| sin educación | 43 | 21 | 0.45 (0.38) | 0.90 (0.81) | 0.36 (0.41) | 0.58 (0.57) |
+| desplazados | 152 | 56 | 0.36 (0.34) | 0.70 (0.59) | 0.57 (0.60) | 0.49 (0.46) |
+| no desplazados | 512 | 145 | 0.31 (0.23) | 0.61 (0.57) | 0.61 (0.64) | 0.38 (0.39) |
+| shi | 473 | 143 | 0.30 (0.26) | 0.66 (0.61) | 0.59 (0.59) | 0.41 (0.39) |
+| havu | 41 | 11 | 0.54 (0.38) | 0.64 (0.55) | 0.60 (0.80) | 0.37 (0.50) |
+| tembo | 23 | 8 | 0.80 (0.73) | 0.88 (0.62) | 0.80 (0.73) | 0.70 (0.56) |
+| "other" | 113 | 35 | 0.28 (0.16) | 0.46 (0.46) | 0.64 (0.72) | 0.36 (0.42) |
+
+Ansiedad GAD > 9 (A) sigue el mismo patrón: hombres sens. 0.48 vs mujeres 0.65; 35–44 y 45+ sens. 0.76/0.69 con
+espec. 0.42/0.31; sin educación sens. 0.92 / espec. 0.32; educación superior 0.60 / 0.75.
+
+Correlaciones en test (Spearman, persona): score de depresión vs PHQ real 0.33 (A) / 0.26 (B); **score vs edad
+0.34 / 0.32**, mientras que PHQ real vs edad es solo 0.17; **score vs educación −0.33 / −0.38**, PHQ real vs
+educación −0.13. Score de ansiedad vs GAD real 0.34 / 0.27.
+
+Lectura:
+- **El modelo empuja el score hacia arriba en personas mayores y con menos educación**, más de lo que esos grupos
+  tienen realmente de depresión: ahí detecta casi todo (sens. 0.75–0.90) pero con muchos falsos positivos
+  (espec. 0.36–0.52). En jóvenes y con educación superior hace lo contrario (sens. 0.38–0.46). Es decir, parte de
+  la señal parece ser "edad / educación en la voz", no síntomas.
+- **En hombres el modelo casi no ordena** (Spearman 0.09 / 0.05; 84 hombres en test).
+- Las lenguas pequeñas (tembo, havu, fuliru, bembe, nyindu) tienen muy pocas personas: no se puede concluir nada.
+- Pendiente: repetir este análisis con C, D y E, y separar el efecto de edad/educación (p. ej. AUROC dentro de cada
+  grupo de edad, o un modelo solo con edad y educación como línea base).
