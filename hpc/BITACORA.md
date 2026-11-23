@@ -727,3 +727,24 @@ Descargado en Hypatia con `python hpc/wandb_history.py pnybari4 bnkqcsas --out ~
 La AUROC de validación sube a ~0.68 en 3 épocas y luego se estanca (0.66–0.71). La pérdida de train baja de forma
 continua (28.5 → 17.2) mientras la de validación se aplana desde ~la época 13 (inicio de sobreajuste). La caída
 validación → test (~0.04) es la esperable al elegir el máximo de una métrica ruidosa.
+
+## 17. DAM 1 solo con la versión 6 del cuestionario (2026-11-23)
+
+Decisión (Sebas, tras la reunión con Ignacio): repetir todo solo con la **versión 6** (cuestionario final, dos
+grabaciones por persona).
+
+- `hpc/bridge_subset.py`: filtra los CSV de `dam1/` a `version == v6` en `~/Kintusgi/Data/bridge_baseline/dam1_v6/`
+  (el audio no se copia; `audio_root` sigue apuntando a `dam1/audio`). Se hereda el split por persona, así que la
+  parte v6 de cada split es un 70/15/15 de las personas v6 estratificado por PHQ > 9.
+
+| split | personas | grabaciones | PHQ > 9 | GAD > 9 | GAD > 14 (personas) |
+|---|---|---|---|---|---|
+| train | 1.275 | 2.552 | 23.8 % | 21.4 % | 58 |
+| val | 273 | 547 | 23.8 % | 18.3 % | 14 |
+| test | 273 | 546 | 23.8 % | 19.4 % | 10 |
+
+- Configs: `dam1_bridge_v6.yaml` (`whisper-small.en`, referencia) y `dam1_bridge_v6_large.yaml`
+  (`openai/whisper-large-v2`). Se usa large-v2 porque mantiene 80 bandas log-mel; large-v3 usa 128 y exigiría cambiar
+  el extractor de características y el perfil log-mel. `training_examples_per_eval` = 1275 (una validación por época);
+  el resto igual a `dam1_bridge.yaml`.
+- Ojo: con 273 personas en test, GAD > 14 tiene solo 10 personas positivas; esa métrica será muy ruidosa.
