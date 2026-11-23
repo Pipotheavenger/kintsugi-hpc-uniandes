@@ -56,9 +56,11 @@ def coral_biases(experiment_name, chkpt_root):
 
 def best_val_version(api, rid):
     run = api.run(f"{ENTITY}/{PROJECT}/{rid}")
-    h = pd.DataFrame(run.scan_history(keys=[MONITOR]))
-    best = int(h[MONITOR].astype(float).idxmax())  # 0-based index of the validation = artifact version
-    return f"v{best}", best + 1, len(h)
+    vals = pd.Series([r[MONITOR] for r in run.scan_history(keys=[MONITOR]) if r.get(MONITOR) is not None], dtype=float)
+    best = int(vals.values.argmax())  # 0-based index of the validation = version of the val score artifact
+    n_art = sum(1 for art in run.logged_artifacts() if art.name.startswith(f"scores-depression-val-{rid}:"))
+    assert n_art == len(vals), f"{n_art} val score artifacts but {len(vals)} validations"
+    return f"v{best}", best + 1, len(vals)
 
 
 def sn_eq_sp_threshold(score, y):
