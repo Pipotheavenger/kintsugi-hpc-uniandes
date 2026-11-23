@@ -6,7 +6,8 @@ Inputs
   --results folder with <run>_scores.csv and <run>_confusion.csv from hpc/bridge_eval.py
   --run     W&B run id
 Outputs (in <results>):
-  <run>_errors_by_group.csv     test errors per demographic group, per task and cutoff (person level)
+  <run>_errors_by_group.csv     test errors per demographic group, per task and cutoff (person level), plus the
+                                Spearman correlation between the model score and the true PHQ/GAD inside each group
   <run>_baseline_with_scores.pkl / .csv
                                 the clean base + model scores per person (mean over the person's recordings) for
                                 val/test people: <task>_score, <task>_split, and 0/1 predictions per cutoff
@@ -82,7 +83,9 @@ for task, cuts in MAIN.items():
                 m = (g == val).to_numpy()
                 yy, pp = y[m], pred[m]
                 tp, fp, fn, tn = int((pp & yy).sum()), int((pp & ~yy).sum()), int((~pp & yy).sum()), int((~pp & ~yy).sum())
+                sp_corr = pd.Series(t.score.to_numpy()[m]).corr(pd.Series(t.label.to_numpy()[m]), method="spearman")
                 rows.append(dict(task=task, cutoff=f">{c}", group=gname, value=val, people=int(m.sum()),
+                                 spearman_score_vs_true=sp_corr,
                                  positives=tp + fn, TP=tp, FP=fp, FN=fn, TN=tn,
                                  sensitivity_recall=tp / (tp + fn) if tp + fn else np.nan,
                                  specificity=tn / (tn + fp) if tn + fp else np.nan,

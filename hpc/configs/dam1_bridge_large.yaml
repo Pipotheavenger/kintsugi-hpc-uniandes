@@ -1,0 +1,94 @@
+---
+experiment_name: "dam1_bridge_all_versions_whisper_large_v2"
+description: "Same as dam1_bridge.yaml but with openai/whisper-large-v2 (largest Whisper with 80 mel bins). DAM 1 on BRIDGE-MH baseline (Bukavu), all questionnaire versions (v1, v2, v4, v5, v6). 4,440 people / 6,305 recordings, WAV 16 kHz. Split 70/15/15 by person, stratified by version and PHQ>9 (hpc/bridge_prepare.py). Based on research/stable/ordinal_regression_mtl_mar_2024/config.yaml"
+
+model_params:
+  model_path: "model.DepAnxClassifier"
+  ckpt_path: ""
+  restore_training_state: false
+  config:
+    whisper_config:
+      model: "openai/whisper-large-v2"   # multilingual; large-v2 keeps 80 mel bins (large-v3 uses 128, would need code changes)
+      hf_config:
+        encoder_layerdrop: 0.0
+        dropout: 0.0
+        activation_dropout: 0.0
+      lora_params:
+        r: 32
+        lora_alpha: 64.0
+        target_modules: "all-linear"
+        lora_dropout: 0.4
+        modules_to_save:
+          - conv1
+          - conv2
+        bias: "all"
+    classifier_config:
+      shared_projection_dim:
+        - 256
+        - 64
+      tasks:
+        depression:
+          proj_dim: 128
+          dropout: 0.4
+        anxiety:
+          proj_dim: 128
+          dropout: 0.4
+
+training_params:
+  seed: 44
+  batch_size: 2
+  effective_batch_size: 32      # upstream 128; train has 3,108 people -> ~97 optimizer steps per epoch
+  max_epochs: 32                # upstream
+  early_stopping_patience: 10   # upstream (counted in validations)
+  training_examples_per_eval: 3108   # one validation per epoch (upstream 16000 for a much larger dataset)
+  cpus_per_worker: 4            # sbatch asks for 8 CPUs
+  monitor_loss: "max:metrics/val/sn_eq_sp@0%i"
+  scheduler:
+    gamma: 0.5
+    milestones:
+      - 20
+      - 26
+  optimizer:
+    backbone:
+      lr: 1.6e-04
+      weight_decay: 0.001
+    classifier:
+      lr: 8.0e-04
+      weight_decay: 0.001
+  tasks:
+    depression:
+      ordinal_loss_target_type: "exact28"
+      num_classes: 28
+      score_variance_loss_weight: 40.0
+    anxiety:
+      ordinal_loss_target_type: "exact22"
+      num_classes: 22
+      score_variance_loss_weight: 40.0
+
+data_params:
+  metadata=kirad.datasets_and_dataloaders.KintsugiMetadata:
+    train:
+      df_or_dataset_version: "/hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/bridge_baseline/dam1/train.csv"
+      duration_column: "prompt_vad_trimmed_duration"
+      merge_rows_by_subject: "many_to_one"   # upstream: both recordings of a person become one sample (column `user`)
+      audio_root: "/hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/bridge_baseline/dam1/audio"
+    val:
+      df_or_dataset_version: "/hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/bridge_baseline/dam1/val.csv"
+    test:
+      df_or_dataset_version: "/hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/bridge_baseline/dam1/test.csv"
+    val_test:
+      duration_column: "prompt_vad_cut_duration"
+      audio_root: "/hpcfs/home/ing_quimica/sf.valencia/Kintusgi/Data/bridge_baseline/dam1/audio"
+    default:
+      label_column:
+        depression: "phq"
+        anxiety: "gad"
+      fraction: 1.0
+  audio=kirad.datasets_and_dataloaders.KintsugiAudioDataset:
+    train:
+      window_method: "random_adjacent_pair"
+    val_test:
+      window_method: "all"
+    default:
+      preprocessor: false
+      normalize_audio: true

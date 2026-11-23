@@ -748,3 +748,47 @@ grabaciones por persona).
   el extractor de características y el perfil log-mel. `training_examples_per_eval` = 1275 (una validación por época);
   el resto igual a `dam1_bridge.yaml`.
 - Ojo: con 273 personas en test, GAD > 14 tiene solo 10 personas positivas; esa métrica será muy ruidosa.
+
+### 17.1 Comparativa con todas las versiones
+Mismo protocolo con **todas las versiones** (v1, v2, v4, v5, v6), para comparar con v6:
+- small.en y small multilingüe: ya corridos en la sección 16 (jobs 803180 → W&B `pnybari4`, 803200 → `bnkqcsas`);
+  no se repiten, solo se evalúan con las métricas nuevas (17.3).
+- large-v2: nueva config `dam1_bridge_large.yaml` (= `dam1_bridge.yaml` cambiando solo el modelo y el
+  `experiment_name`).
+
+Experimentos de esta sección:
+
+| # | datos | Whisper | config |
+|---|---|---|---|
+| A | todas las versiones | small.en | `dam1_bridge.yaml` (803180, `pnybari4`) |
+| B | todas las versiones | small (multilingüe) | `dam1_bridge_multilingual.yaml` (803200, `bnkqcsas`) |
+| C | todas las versiones | large-v2 | `dam1_bridge_large.yaml` |
+| D | solo v6 | small.en | `dam1_bridge_v6.yaml` |
+| E | solo v6 | large-v2 | `dam1_bridge_v6_large.yaml` |
+
+Límite de tiempo: los jobs large se lanzan con `sbatch --time` mayor que el de `run_job.sbatch` (12 h), porque
+large-v2 (~635 M parámetros en el encoder) es ~6 veces más pesado que small (~88 M). Con 2 GPUs por usuario, el
+tercer job queda en cola hasta que se libere una.
+
+### 17.2 CORAL y de dónde salen los scores
+- **CORAL** (`kirad/losses.py`, `CORALLoss`; Cao et al. 2019, arXiv:1901.07884) es regresión ordinal: cada tarea
+  (depresión, ansiedad) produce **un solo logit x** por ventana de 30 s, y la pérdida aprende un sesgo b_k por cada
+  posible corte k (27 para PHQ, 21 para GAD). La probabilidad de estar por encima del corte k es
+  `P(y > k) = sigmoid(x + b_k)`, y la pérdida es la suma de entropías binarias de esos K-1 problemas
+  ("código termómetro"). A diferencia de softmax, respeta el orden: el mismo x sirve para todos los cortes.
+- **Score.** Lo que el pipeline guarda y evalúa es x promediado sobre las ventanas de cada grabación
+  (`average_and_variance_tensor_in_segments` en `OrdinalRegressionPLModule.step`). Al final de cada validación y del
+  test lo sube a W&B como artifact `scores-<tarea>-<split>-<run_id>` (tabla `scores`: uuid, scores,
+  score_variances, labels, quantized_labels; `on_validation_test_epoch_end`, `kirad/base_models.py`). Hay una
+  versión por validación (v0, v1, ...) y una para test.
+- **Probabilidades.** `hpc/bridge_eval.py` lee los sesgos b_k del mejor checkpoint (`chkpts/<experiment_name>/
+  epoch-*.ckpt`, claves `tasks.<tarea>.loss.biases`) y calcula `prob_gt<c> = sigmoid(score + b_c)` para cada corte.
+  La AUROC y los umbrales no cambian (es una transformación monótona); la probabilidad es más fácil de interpretar.
+- **Umbral y matriz de confusión** (`hpc/bridge_eval.py`): por tarea y corte, umbral donde sensibilidad =
+  especificidad en **validación** (tabla de la mejor época = versión `v<índice de la mejor validación>`), aplicado a
+  **test**: TP, FP, FN, TN, sensibilidad (= recall), especificidad, precisión (PPV), NPV, F1 y accuracy. Se calcula
+  por grabación (como el pipeline) y por persona (promedio de los scores de sus grabaciones).
+- **Errores por grupo** (`hpc/bridge_error_analysis.py`, en el Mac porque usa la base de la encuesta): por persona en
+  test y por grupo (sexo, edad, lengua materna, desplazado, educación, orden de las preguntas): FP, FN, tasas de
+  falsos positivos/negativos y la correlación de Spearman entre el score y el PHQ/GAD real. También escribe la base
+  limpia + scores (`<run>_baseline_with_scores.pkl/.csv`) para Ignacio: solo personas de val/test tienen score.

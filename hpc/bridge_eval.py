@@ -1,9 +1,17 @@
 """
 bridge_eval.py — confusion matrices and raw scores for DAM 1 runs (run on Hypatia, where `wandb login` is set).
 
-For each run it downloads from W&B the score tables the model logs (`scores-<task>-<split>-<run_id>`):
+For each run it downloads from W&B the score tables the model logs (`scores-<task>-<split>-<run_id>`,
+written by OrdinalRegressionPLModule.on_validation_test_epoch_end in kirad/base_models.py):
 the validation table of the best epoch (max metrics/val/sn_eq_sp@0%i) and the test table. Each row is one
-recording: uuid, the model's continuous score (higher = more severe) and the true PHQ/GAD.
+recording: uuid, the model's score and the true PHQ/GAD.
+
+What the score is (CORAL, kirad/losses.py): each task head outputs ONE logit x per 30 s window; the score is
+the mean of x over the recording's windows. CORAL learns one bias b_k per possible cutoff k, and
+P(score > k) = sigmoid(x + b_k). So the score is a latent severity (higher = more severe) and the probability of
+being above a cutoff is obtained with that cutoff's bias, read here from the best checkpoint
+(chkpts/<experiment_name>/epoch-*.ckpt, keys tasks.<task>.loss.biases). Thresholds and AUROC are the same with
+the score or the probability (monotone transform).
 
 Then, per task and cutoff (PHQ > 9, > 14; GAD > 4, > 9, > 14):
   - threshold = the score where sensitivity = specificity on VALIDATION (as Kintsugi does);
@@ -20,6 +28,9 @@ import os
 
 import numpy as np
 import pandas as pd
+import glob
+
+import torch
 import wandb
 
 ENTITY, PROJECT = "sebastian-valencia-world-bank-", "kintsugi-hpc-uniandes"
@@ -31,6 +42,16 @@ def table(api, task, split, rid, version):
     art = api.artifact(f"{ENTITY}/{PROJECT}/scores-{task}-{split}-{rid}:{version}")
     df = art.get("scores").get_dataframe()
     return df[["uuid", "scores", "labels"]].rename(columns={"scores": "score", "labels": "label"})
+
+
+def coral_biases(experiment_name, chkpt_root):
+    paths = sorted(glob.glob(os.path.join(chkpt_root, experiment_name, "epoch-*.ckpt")))
+    if not paths:
+        print(f"   (no checkpoint in {chkpt_root}/{experiment_name}: probabilities not computed)")
+        return None, None
+    sd = torch.load(paths[-1], map_location="cpu", weights_only=False)["state_dict"]
+    keys = {t: [k for k in sd if f"tasks.{t}." in k and k.endswith("loss.biases")] for t in CUTOFFS}
+    return {t: sd[ks[0]].float().numpy() for t, ks in keys.items() if ks}, paths[-1]
 
 
 def best_val_version(api, rid):
@@ -67,6 +88,7 @@ def confusion(score, y, thr):
 ap = argparse.ArgumentParser()
 ap.add_argument("runs", nargs="+")
 ap.add_argument("--out", default=os.path.expanduser("~/Kintusgi/results"))
+ap.add_argument("--chkpts", default=os.path.expanduser("~/Kintusgi/kintsugi-hpc-uniandes/chkpts"))
 a = ap.parse_args()
 out = os.path.expanduser(a.out)
 os.makedirs(out, exist_ok=True)
@@ -74,12 +96,17 @@ api = wandb.Api()
 
 for rid in a.runs:
     vver, vnum, nval = best_val_version(api, rid)
-    print(f"== {rid}: best validation {vnum} of {nval} (val score table {vver})")
+    name = api.run(f"{ENTITY}/{PROJECT}/{rid}").name
+    biases, ckpt = coral_biases(name, os.path.expanduser(a.chkpts))
+    print(f"== {rid} ({name}): best validation {vnum} of {nval} (val score table {vver}); checkpoint {ckpt}")
     scores, rows = [], []
     for task, cuts in CUTOFFS.items():
         val, test = table(api, task, "val", rid, vver), table(api, task, "test", rid, "latest")
         for d, split in ((val, "val"), (test, "test")):
             d = d.assign(task=task, split=split, user=d.uuid.str.split("__").str[0])
+            if biases is not None and task in biases:
+                for c in cuts:
+                    d[f"prob_gt{c}"] = 1 / (1 + np.exp(-(d.score + biases[task][c])))
             scores.append(d)
         per_person = {s: d.assign(user=d.uuid.str.split("__").str[0]).groupby("user").agg(score=("score", "mean"), label=("label", "first"))
                       for s, d in (("val", val), ("test", test))}
@@ -88,7 +115,9 @@ for rid in a.runs:
                 thr = sn_eq_sp_threshold(v.score.to_numpy(), (v.label > c).to_numpy())
                 m = confusion(t.score.to_numpy(), (t.label > c).to_numpy(), thr)
                 rows.append(dict(run=rid, task=task, cutoff=f">{c}", level=level, threshold=thr, **m))
-    pd.concat(scores, ignore_index=True)[["uuid", "user", "split", "task", "score", "label"]].to_csv(
+    allsc = pd.concat(scores, ignore_index=True)
+    cols = ["uuid", "user", "split", "task", "score", "label"] + sorted(c for c in allsc.columns if c.startswith("prob_"))
+    allsc[cols].to_csv(
         os.path.join(out, f"{rid}_scores.csv"), index=False)
     cm = pd.DataFrame(rows)
     cm.to_csv(os.path.join(out, f"{rid}_confusion.csv"), index=False)
