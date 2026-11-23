@@ -901,3 +901,132 @@ Lectura:
 - Las lenguas pequeñas (tembo, havu, fuliru, bembe, nyindu) tienen muy pocas personas: no se puede concluir nada.
 - Pendiente: repetir este análisis con C, D y E, y separar el efecto de edad/educación (p. ej. AUROC dentro de cada
   grupo de edad, o un modelo solo con edad y educación como línea base).
+
+### 17.7 Report card nativo de Kintsugi (`get_wandb_report_card_tsvs`)
+`kirad.utils.get_wandb_report_card_tsvs` falla en nuestros runs con `KeyError: 'tasks'`: lee las tareas de
+`run.config["model_params"]["tasks"]` y las rutas de los splits de `data_params["<split>_split_or_dataset_version"]`
+/ `data_params["data_sources"]` (formato de config antiguo). Nuestras configs tienen las tareas en
+`training_params.tasks` y los CSV en `data_params["metadata=..."][<split>]["df_or_dataset_version"]`.
+- `hpc/bridge_report_card.py` (nuevo): **no modifica kirad**. Sustituye `wandb.Api` dentro de `kirad.utils` por una
+  subclase cuyo `run()` agrega esas llaves al objeto de config en memoria (no se escribe en W&B) y llama la función
+  original sin cambios. Uso: `KINTSUGI_RAD_PATH=$PWD PYTHONPATH=$PWD python hpc/bridge_report_card.py <ids>`.
+- Efecto propio de la función: sube un artifact `report-cards-<run_id>` a cada run de W&B (wandb.init resume).
+- Salida: `~/Kintusgi/results/<run>_report_card_<tarea>.tsv` (copiadas al Mac en `results/`).
+- Control: sn_eq_sp_test de A depresión = 60.7 %, igual al 0.607 de `bridge_eval`.
+
+Métricas multiclase (bandas de severidad, umbrales afinados en validación para macro-F1), test:
+
+| exp | dep macro-F1 (base) | dep accuracy (base) | dep error abs. (base) | anx macro-F1 (base) | anx accuracy (base) | anx error abs. (base) |
+|---|---|---|---|---|---|---|
+| A | 0.426 (0.278) | 0.634 (0.717) | 0.486 (0.396) | 0.355 (0.161) | 0.440 (0.473) | 0.773 (0.755) |
+| B | 0.398 (0.278) | 0.549 (0.717) | 0.550 (0.396) | 0.328 (0.161) | 0.420 (0.473) | 0.794 (0.755) |
+| C | 0.458 (0.278) | 0.638 (0.717) | 0.484 (0.396) | 0.330 (0.161) | 0.410 (0.473) | 0.819 (0.755) |
+| D | 0.418 (0.288) | 0.575 (0.761) | 0.523 (0.317) | 0.341 (0.177) | 0.499 (0.547) | 0.632 (0.685) |
+| E | 0.424 (0.288) | 0.685 (0.761) | 0.448 (0.317) | 0.273 (0.177) | 0.466 (0.547) | 0.768 (0.685) |
+
+"base" = mejor clasificador constante. Lectura: el macro-F1 supera la base; accuracy y error absoluto no (la
+mayoría de la gente está en la banda más baja, y el modelo reparte personas entre bandas). Las filas de abstención
+(indet) del report card no se usan: mezclan cortes y no coinciden con `@40%i` del log de test.
+
+### 17.8 Resultados de C, D y E (2026-11-23)
+Los tres terminaron COMPLETED: **810611 C** (todas, large-v2, W&B `qviai5hj`, 4 h 13, `nodea-gpu-3`),
+**810597 D** (v6, small.en, `oxmqyl0h`, 1 h 44, `nodei-gpu-1`), **810610 E** (v6, large-v2, `jmy587yu`, 1 h 21,
+`nodea-gpu-3`). En Hypatia: `bridge_eval.py`, `wandb_history.py` y `bridge_report_card.py` sobre los tres; todo
+copiado al Mac (`scp`) a `Bridge_baseline/data/clean/results/`.
+
+| exp | validaciones (mejor) | checkpoint | test AUROC dep / anx (grabación, W&B) | sn=sp dep / anx |
+|---|---|---|---|---|
+| A | 23 (13) | epoch-13 | 0.656 / 0.675 | 0.607 / 0.608 |
+| B | 17 (7) | epoch-7 | 0.646 / 0.664 | 0.600 / 0.608 |
+| C | 19 (9) | epoch-9 | 0.666 / 0.679 | 0.610 / 0.619 |
+| D | 31 (27) | epoch-27 | 0.702 / 0.692 | 0.627 / 0.618 |
+| E | 14 (4) | epoch-4 | 0.607 / 0.591 | 0.535 / 0.550 |
+
+Nota de datos: en v6, kirad descarta por duración a 1 persona de test (`70-64-56-30`, 2 grabaciones) y 1 grabación
+más: se puntúan 272 personas / 543 grabaciones (igual en todas las corridas).
+
+Historial (W&B): E tiene su mejor AUROC de validación en la época 1 (0.666) y luego oscila entre 0.58 y 0.66; el
+early stopping (sn = sp, paciencia 10) lo cortó en la época 14 **con las pérdidas aún bajando** (train 27.6 → 23.6,
+val 26.1 → 23.0): es sub-entrenamiento con una validación ruidosa (273 personas), no sobreajuste. D mejora lento y su
+mejor checkpoint es la validación 27 de 31; su pérdida de validación se aplana en ~21.1 desde la época 25.
+large-v2 tarda ~1.7× más por época que small aun en la L40 (C 13.3 min/época vs A ~7.8; E 5.8 vs D 3.4).
+
+Matriz de confusión por persona, test, umbral de validación sn = sp (A y B en 17.4):
+
+| exp | tarea | corte | pers. | pos. | TP | FP | FN | TN | recall | espec. | precisión | NPV | F1 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| C | dep | >9 | 664 | 201 | 116 | 175 | 85 | 288 | 0.577 | 0.622 | 0.399 | 0.772 | 0.472 |
+| C | dep | >14 | 664 | 86 | 51 | 192 | 35 | 386 | 0.593 | 0.668 | 0.210 | 0.917 | 0.310 |
+| C | anx | >4 | 664 | 368 | 230 | 109 | 138 | 187 | 0.625 | 0.632 | 0.678 | 0.575 | 0.651 |
+| C | anx | >9 | 664 | 165 | 89 | 190 | 76 | 309 | 0.539 | 0.619 | 0.319 | 0.803 | 0.401 |
+| C | anx | >14 | 664 | 36 | 24 | 204 | 12 | 424 | 0.667 | 0.675 | 0.105 | 0.972 | 0.182 |
+| D | dep | >9 | 272 | 65 | 38 | 75 | 27 | 132 | 0.585 | 0.638 | 0.336 | 0.830 | 0.427 |
+| D | dep | >14 | 272 | 21 | 13 | 93 | 8 | 158 | 0.619 | 0.629 | 0.123 | 0.952 | 0.205 |
+| D | anx | >4 | 272 | 123 | 82 | 57 | 41 | 92 | 0.667 | 0.617 | 0.590 | 0.692 | 0.626 |
+| D | anx | >9 | 272 | 53 | 32 | 80 | 21 | 139 | 0.604 | 0.635 | 0.286 | 0.869 | 0.388 |
+| D | anx | >14 | 272 | 10 | 6 | 70 | 4 | 192 | 0.600 | 0.733 | 0.079 | 0.980 | 0.140 |
+| E | dep | >9 | 272 | 65 | 31 | 67 | 34 | 140 | 0.477 | 0.676 | 0.316 | 0.805 | 0.380 |
+| E | dep | >14 | 272 | 21 | 8 | 79 | 13 | 172 | 0.381 | 0.685 | 0.092 | 0.930 | 0.148 |
+| E | anx | >4 | 272 | 123 | 62 | 49 | 61 | 100 | 0.504 | 0.671 | 0.559 | 0.621 | 0.530 |
+| E | anx | >9 | 272 | 53 | 24 | 79 | 29 | 140 | 0.453 | 0.639 | 0.233 | 0.828 | 0.308 |
+| E | anx | >14 | 272 | 10 | 4 | 74 | 6 | 188 | 0.400 | 0.718 | 0.051 | 0.969 | 0.091 |
+
+Por grabación están en `<run>_confusion.csv` (`level == recording`).
+
+### 17.9 Comparativa justa: mismas personas (`hpc/bridge_compare.py`, nuevo, corre en el Mac)
+A, B y C se prueban en 664 personas y D, E en 273: no son comparables directamente. Como el split v6 es un
+subconjunto del split de todas las versiones, las 272 personas v6 de test (las puntuadas por todos) son personas de
+test de los cinco runs. El script calcula, por persona: AUROC por corte con IC 95 % bootstrap sobre personas (1.000
+remuestreos, semilla 0), en el test propio de cada run y en las 272 personas v6; la diferencia pareada de cada run
+contra A (mismos remuestreos); y correlaciones de Spearman (sin scipy: rangos + Pearson). Salidas:
+`compare_auroc.csv`, `compare_paired.csv`, `compare_corr.csv` en `results/`.
+
+AUROC por persona en las 272 personas v6 (positivos entre paréntesis):
+
+| corte | A | B | C | D | E |
+|---|---|---|---|---|---|
+| PHQ > 9 (65) | 0.671 | 0.647 | 0.650 | 0.681 | 0.605 |
+| PHQ > 14 (21) | 0.641 | 0.650 | 0.643 | 0.720 | 0.601 |
+| GAD > 4 (123) | 0.685 | 0.656 | 0.661 | 0.698 | 0.624 |
+| GAD > 9 (53) | 0.633 | 0.617 | 0.609 | 0.672 | 0.556 |
+| GAD > 14 (10) | 0.564 | 0.617 | 0.604 | 0.702 | 0.569 |
+
+Diferencia pareada contra A (IC 95 %): D: PHQ>9 +0.009 (−0.04, +0.06); PHQ>14 +0.080 (−0.00, +0.16); GAD>4 +0.013
+(−0.03, +0.06); GAD>9 +0.039 (−0.02, +0.09); GAD>14 +0.138 (+0.01, +0.26). E: PHQ>9 −0.067 (−0.14, +0.00); GAD>4
+−0.061 (−0.12, −0.00). B y C: −0.02 a −0.03 en los cortes principales, IC incluyen 0.
+
+En el test propio (personas, IC 95 %): A PHQ>9 0.660 (0.62–0.70); C 0.662 (0.61–0.71); D 0.681 (0.60–0.76);
+E 0.605 (0.52–0.69).
+
+Lectura:
+- En los cortes principales (PHQ > 9, GAD > 4) **D y A empatan** sobre las mismas personas: entrenar solo con v6 no
+  gana casi nada en personas v6. La ventaja de D está en los cortes raros, con 10–21 positivos: sugerente, no firme.
+- **large-v2 no ayuda**: C ≈ A con todas las versiones; E queda por debajo de A en todo.
+
+### 17.10 Errores por grupo demográfico y correlaciones: C, D y E
+`bridge_error_analysis.py --run <id>` para C, D y E (salidas `<run>_errors_by_group.csv` y
+`<run>_baseline_with_scores.{pkl,csv}`; en D y E tienen score 545 personas, val + test v6).
+
+Spearman, test propio, por persona (depresión; ansiedad entre paréntesis):
+
+| exp | score~PHQ real | score~edad | score~educación | PHQ real~edad | PHQ real~educación |
+|---|---|---|---|---|---|
+| A | 0.33 (0.34) | 0.34 (0.35) | −0.33 (−0.32) | 0.17 (0.14) | −0.13 (−0.09) |
+| B | 0.26 (0.28) | 0.32 (0.34) | −0.38 (−0.37) | 0.17 (0.14) | −0.13 (−0.09) |
+| C | 0.31 (0.31) | 0.36 (0.36) | −0.38 (−0.37) | 0.17 (0.14) | −0.13 (−0.09) |
+| D | 0.28 (0.29) | 0.27 (0.29) | −0.20 (−0.19) | 0.19 (0.11) | −0.14 (−0.12) |
+| E | 0.23 (0.19) | 0.36 (0.37) | −0.35 (−0.35) | 0.19 (0.11) | −0.14 (−0.12) |
+
+PHQ > 9 por grupo (recall / especificidad), D: 18–24 0.31 / 0.69; 25–34 0.57 / 0.71; 35–44 0.81 / 0.48;
+45+ 0.57 / 0.48; sin educación 0.88 / 0.45; primaria 0.80 / 0.57; secundaria 0.47 / 0.63; superior 0.54 / 0.73.
+Hombres (PHQ > 9), Spearman score~PHQ: A 0.09, B 0.05, C 0.13, D 0.37 (46 hombres), E 0.09; recall en hombres:
+0.48, 0.26, 0.26, 0.60, 0.10.
+
+Lectura: el patrón de 17.6 se repite en las cinco corridas (mayores y menos educados sobre-marcados, jóvenes y con
+educación superior subdetectados). D es la que menos depende de edad/educación; E la que más (más edad que PHQ).
+
+### 17.11 Presentación
+`KitsugiCode/Avance_23_NOV_2026.pptx` (24 slides, mismo formato que la del 16 NOV): pendientes, cinco experimentos,
+v6, cambios de código, nodo de economía, CORAL y scores, export para Ignacio, glosario, historial, AUROC, misma gente,
+matrices de confusión, precisión por corte, report card, correlaciones, errores por edad/educación, hombres,
+large vs small, caveats, conclusiones, siguientes pasos y reproducibilidad.
