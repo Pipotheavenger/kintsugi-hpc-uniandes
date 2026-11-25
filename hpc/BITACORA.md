@@ -1030,3 +1030,36 @@ educación superior subdetectados). D es la que menos depende de edad/educación
 v6, cambios de código, nodo de economía, CORAL y scores, export para Ignacio, glosario, historial, AUROC, misma gente,
 matrices de confusión, precisión por corte, report card, correlaciones, errores por edad/educación, hombres,
 large vs small, caveats, conclusiones, siguientes pasos y reproducibilidad.
+
+### 17.12 Gráficas de análisis y presentación del 25 NOV
+`hpc/bridge_figures.py` (nuevo, corre en el Mac): todas las gráficas comparativas de A–E. **Regla de privacidad:**
+solo agregados (medias por grupo, AUROC, conteos); ningún punto individual, boxplots sin outliers, grupos con
+menos de 10 personas ocultos; nada con `interview__key` se imprime. Salidas en `KitsugiCode/Avance_25_NOV_figs/`
+(17 PNG + `summary.json` con los números agregados). Presentación: `KitsugiCode/Avance_25_NOV_2026.pptx` (25 slides,
+construida en el Mac con `Avance_25_NOV_figs/deck/build_25nov.py`).
+
+Análisis nuevos (persona, test; IC 95 % bootstrap sobre personas, 500 remuestreos):
+- **Versiones.** PHQ > 9: v1 44 %, v2 43 %, v4 39 %, v5 32 %, v6 24 %; desplazados 29/32/29/26/22 %. Edad mediana
+  (28–29), % mujeres (86–93 %) y educación mediana (12–13 años) casi iguales. v6: 2 grabaciones por persona (secciones
+  A y F, 62.2 / 62.4 s), v1–v5: 1.
+- **Dos grabaciones v6 (D, 267 personas):** Spearman entre el score de A y el de F = 0.79; AUROC PHQ > 9 con solo A
+  0.654, solo F 0.677, promedio 0.675.
+- **Calibración** de P(> 9): media bien calibrada (A dep: 0.29 predicho vs 0.30 observado) pero comprimida: quintil
+  superior 0.42 vs 0.47, inferior 0.22 vs 0.17. E casi plano (0.25 → 0.29).
+- **Score por banda de PHQ:** la mediana sube de 0–4 a 15–19, pero 20–27 no queda por encima de 15–19.
+- **Correlación parcial** score~PHQ quitando edad, educación, sexo y desplazamiento: A 0.33 → 0.27; D 0.28 → 0.23.
+- **AUROC dentro de grupos (PHQ > 9, A):** 18–24 0.62, 25–34 0.64, 35–44 0.78, 45+ 0.54; hombres 0.51 (C 0.51,
+  D 0.71 con 46 hombres); mujeres 0.68.
+- **Línea base demográfica** (regresión logística sobre edad, años de educación, sexo, desplazamiento y versión,
+  ajustada en train): PHQ > 9 0.626 (test de todas las versiones) vs voz A 0.660 y voz A + demografía 0.675 (combinación
+  ajustada en validación); GAD > 9 0.574 vs 0.652 / 0.663. En v6: demografía 0.581, voz D 0.681, D + demografía 0.663
+  (la combinación empeora: se ajusta con solo 273 personas de validación).
+- **Acuerdo entre corridas** (Spearman de scores, 272 personas v6): A–B 0.90, A–C 0.87, A–D 0.78, D–E 0.49.
+- **Entrevistador** (`Q1_enumeratorid`): % de la varianza del score entre entrevistadores: A 38 %, B 47 %, C 40 %,
+  D 29 %, E 36 % (PHQ real: 25–27 %). AUROC PHQ > 9 ordenando solo dentro de cada entrevistador (score menos la media
+  del entrevistador; entrevistadores con ≥ 5 personas de test): A 0.660 → 0.589, B 0.636 → 0.577, C 0.662 → 0.601,
+  D 0.656 → 0.602, E 0.637 → 0.556. Parte de la señal es quién hizo la entrevista.
+
+Lectura para los siguientes experimentos: split que deje fuera entrevistadores completos; reportar AUROC dentro de
+grupos de edad/educación y contra la línea base demográfica; v6 sola no ordena mejor a la gente de v6 que todas las
+versiones; large-v2 no aporta.
